@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createDose, transitionDose } from '../src/domain.mjs';
 const make = () => createDose({ patientId: 'synthetic-p1', doseId: 'd1', scheduleVersion: 1, dueAt: 1000, expiresAt: 2000 });
 const command = (type = 'report_taken') => ({ type, patientId: 'synthetic-p1', doseId: 'd1', scheduleVersion: 1 });
-const context = (extra = {}) => ({ actorId: 'synthetic-user', authorizedPatientIds: ['synthetic-p1'], currentScheduleVersion: 1, now: 1100, ...extra });
+const context = (extra = {}) => ({ actorId: 'synthetic-user', authorizedPatientIds: ['synthetic-p1'], allowedActions: ['report_taken', 'report_not_taken', 'cancel'], currentScheduleVersion: 1, now: 1100, ...extra });
 const rejects = (code, fn) => assert.throws(fn, (e) => e.code === code);
 test('records explicit report without mutating pending state', () => {
   const d = make(); const result = transitionDose(d, command(), context());
@@ -41,4 +41,21 @@ test('cancelled dose rejects confirmation and cancellation replay is idempotent'
 test('unknown commands and invalid schedule input rejected', () => {
   rejects('INVALID_COMMAND', () => transitionDose(make(), command('จ้า'), context()));
   rejects('INVALID_DOSE', () => createDose({ patientId: 'p', doseId: 'd', scheduleVersion: 0, dueAt: 0, expiresAt: 1 }));
+});
+test('stored state validation fails closed before commands or idempotency', () => {
+  const reported = transitionDose(make(), command(), context());
+  for (const base of [make(), reported]) {
+    for (const patch of [{ dueAt: undefined }, { expiresAt: undefined }, { dueAt: NaN }, { expiresAt: Infinity }, { expiresAt: 999 }, { scheduleVersion: 0 }, { patientId: '' }, { doseId: '' }, { status: 'unknown' }]) {
+      rejects('INVALID_STATE', () => transitionDose({ ...base, ...patch }, command(), context()));
+    }
+  }
+  rejects('INVALID_STATE', () => transitionDose({ ...reported, reportedAt: undefined }, command(), context()));
+  rejects('INVALID_STATE', () => transitionDose({ ...reported, reportedBy: null }, command(), context()));
+});
+test('patient membership alone does not authorize cancellation or reports', () => {
+  rejects('FORBIDDEN', () => transitionDose(make(), command('cancel'), context({ allowedActions: ['report_taken'] })));
+  rejects('FORBIDDEN', () => transitionDose(make(), command(), context({ allowedActions: undefined })));
+  rejects('FORBIDDEN', () => transitionDose(make(), command(), context({ allowedActions: ['cancel'] })));
+  const cancelled = transitionDose(make(), command('cancel'), context());
+  rejects('FORBIDDEN', () => transitionDose(cancelled, command('cancel'), context({ allowedActions: [] })));
 });
