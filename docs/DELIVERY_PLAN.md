@@ -4,7 +4,7 @@
 This branch is a foundation prototype, not a production medication service. Tests of pure logic and mocked adapters do not establish actual Cloudflare/LINE integration or availability.
 
 ## Work order
-1. Domain validation and authorization: foundation completed; cancellation audit must be persisted atomically before use.
+1. Domain validation and authorization: foundation completed; internal SQL adapter now persists reports/cancellation and audit atomically; authenticated API integration remains pending.
 2. LINE webhook HMAC verification: foundation implemented; durable minimal inbox in progress.
 3. Caregiver UI: synthetic in-memory demo only; not connected to patient records.
 4. Staging Worker + D1 migration + signed synthetic smoke tests.
@@ -32,3 +32,4 @@ wrangler.jsonc targets only nong-oon-staging and the separately created staging 
 
 ## Spend controls
 Zero runtime dependencies for current core/UI. No AI for button presses or scheduling. CI cancels superseded jobs and has a timeout. Load tests must not send paid LINE/AI requests. No additional subscriptions or plan upgrades without approval.
+
