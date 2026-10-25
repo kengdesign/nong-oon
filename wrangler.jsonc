@@ -1,0 +1,31 @@
+{
+  "name": "nong-oon-staging",
+  "main": "src/webhook.mjs",
+  "compatibility_date": "2026-10-25",
+  "account_id": "c5f673e7bdf271485603029e19f42f49",
+  "workers_dev": false,
+  "preview_urls": false,
+  "limits": {
+    "cpu_ms": 50
+  },
+  "assets": {
+    "directory": "./public",
+    "run_worker_first": [
+      "/webhook/*",
+      "/health"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nong-oon-staging",
+      "database_id": "9a584c89-3b1f-4ae6-9b59-f97d1b75946d",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "APP_ENV": "staging",
+    "DELIVERY_ENABLED": "false",
+    "INGESTION_ENABLED": "false"
+  }
+}

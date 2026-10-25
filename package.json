@@ -1,0 +1,1 @@
+{"name":"nong-oon","version":"0.1.0","private":true,"type":"module","engines":{"node":">=22"},"scripts":{"test":"node --test","check":"node --check src/domain.mjs && node --check src/webhook.mjs && node --check src/ingestion.mjs && node --check public/app.mjs"}}
