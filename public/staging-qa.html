@@ -3,8 +3,8 @@
 <style>body{font:16px system-ui,sans-serif;background:#f3f8f5;color:#163b2d;margin:0}main{max-width:850px;margin:40px auto;padding:24px;background:white;border-radius:20px}button{background:#176447;color:white;border:0;padding:14px 20px;border-radius:10px;cursor:pointer;margin:6px}button:disabled{opacity:.45;cursor:wait}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#edf3ef;padding:20px;border-radius:12px}small{display:block;line-height:1.7}</style>
 <main><h1>ทดสอบน้องอุ่นบน staging</h1><p>สำหรับผู้ดูแลที่ผ่าน Cloudflare Access แล้ว ใช้ข้อมูลจำลอง ไม่มีการส่ง LINE</p>
 <small>ทดสอบ Rate limit ครั้งละ 40 คำขอไป /health โดยไม่มี retry อัตโนมัติ เว้นอย่างน้อย 20 วินาทีก่อนทดสอบซ้ำ<br>ผล 302/หน้าล็อกอินไม่ถือว่าผ่าน ต้องได้รับ JSON จากแอป หรือ HTTP 429 จากกฎจำกัดคำขอ</small>
-<p><button id="basic">1. ตรวจระบบและ webhook</button><button id="burst">2. ทดสอบ 40 คำขอ</button><button id="recovery">3. ตรวจหลังพ้นเวลาบล็อก</button></p>
-<pre id="result" role="status" aria-live="polite">พร้อมทดสอบ</pre></main>
+<p><button id="basic">1. ตรวจระบบและ webhook</button><button id="burst">2. ทดสอบ 40 คำขอ</button><button id="recovery">3. ตรวจหลังพ้นเวลาบล็อก</button><button id="paced">4. ทดสอบเว้นจังหวะ 45 คำขอ</button></p>
+<p><label for="channelSecret">ทดสอบด้วย Channel secret (ไม่บันทึกค่า)</label><br><input id="channelSecret" type="password" autocomplete="off" spellcheck="false"><button id="signed">5. ทดสอบลายเซ็น</button></p><small>นำ Secret มาใส่เฉพาะตอนทดสอบ ค่าจะถูกล้างจากช่องทันทีที่กดข้อ 5 ใช้เซ็นคำขอในเบราว์เซอร์ ไม่มีการส่ง Secret เป็นข้อความในคำขอ ไม่มีการบันทึกลงฐานข้อมูลหรือ browser storage</small><pre id="result" role="status" aria-live="polite">พร้อมทดสอบ</pre></main>
 <script type="module">
 const output=document.querySelector('#result');
 const buttons=[...document.querySelectorAll('button')];
@@ -17,7 +17,7 @@ async function request(path,options={}){
   const response=await fetch(path,{...options,credentials:'same-origin',cache:'no-store',redirect:'manual',signal:controller.signal});
   const text=await response.text();
   let body;try{body=JSON.parse(text)}catch{}
-  return {status:response.status,json:body??null,redirect:response.type==='opaqueredirect',html:/<html|<!doctype/i.test(text)};
+  return {status:response.status,json:body??null,redirect:response.type==='opaqueredirect',html:/<html|<!doctype/i.test(text),colo:response.headers.get('cf-ray')?.split('-').pop()??null,cache:response.headers.get('cf-cache-status')};
  }catch(error){return {status:0,error:error.name}}finally{clearTimeout(timer)}
 }
 async function run(task){if(busy)return;busy=true;buttons.forEach(b=>b.disabled=true);try{await task()}catch(error){log({error:error.message})}finally{busy=false;buttons.forEach(b=>b.disabled=false)}}
@@ -46,5 +46,43 @@ document.querySelector('#burst').onclick=()=>run(async()=>{
 document.querySelector('#recovery').onclick=()=>run(async()=>{
  assertHost();if(Date.now()<cooldown)throw Error('กรุณารอให้ครบ 20 วินาทีหลังทดสอบ burst');
  const result=await request('/health');log({test:'recovery',result,pass:result.status===200&&result.json?.deliveryEnabled===false});
+});
+
+document.querySelector('#paced').onclick=()=>run(async()=>{
+ assertHost();if(Date.now()<cooldown)throw Error('กรุณารอให้ครบ 20 วินาทีแล้วทดสอบใหม่');
+ cooldown=Date.now()+60000;
+ const start=performance.now(),results=[],pending=[];
+ const nonce=crypto.randomUUID();
+ for(let i=0;i<45;i++){
+  pending.push(request('/health?qa='+encodeURIComponent(nonce)+'&n='+i).then(r=>{results.push(r)}));
+  if(i<44)await new Promise(resolve=>setTimeout(resolve,200));
+ }
+ await Promise.all(pending);cooldown=Date.now()+20000;
+ const statuses={},colos={};for(const r of results){statuses[r.status]=(statuses[r.status]??0)+1;colos[r.colo??'unknown']=(colos[r.colo??'unknown']??0)+1}
+ log({test:'paced',requests:45,elapsedMs:Math.round(performance.now()-start),statuses,colos,
+ blocked429:results.filter(r=>r.status===429).length,rateLimitObserved:results.some(r=>r.status===429),
+ accessOrHtmlResponses:results.filter(r=>r.redirect||r.html).length,note:'แต่ละคำขอต่าง URL เว้น 200 ms ไม่มี retry ตรวจข้อ 3 หลังรอ 20 วินาที'});
+});
+document.querySelector('#signed').onclick=()=>run(async()=>{
+ assertHost();
+ const input=document.querySelector('#channelSecret');
+ let secret=input.value;input.value='';
+ if(!secret||secret!==secret.trim())throw Error('กรุณาใส่ Channel secret ให้ถูกต้อง ไม่มีช่องว่างหัวท้าย');
+ let key;
+ try{key=await crypto.subtle.importKey('raw',new TextEncoder().encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign'])}finally{secret=''}
+ async function signedRequest(events,valid=true){
+  const body=JSON.stringify({events});
+  const digest=new Uint8Array(await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(body)));
+  if(!valid)digest[0]^=1;
+  return request('/webhook/line',{method:'POST',headers:{'content-type':'application/json','x-line-signature':btoa(String.fromCharCode(...digest))},body});
+ }
+ try{
+  const verified=await signedRequest([]);
+  const rejected=await signedRequest([],false);
+  const guarded=await signedRequest([{webhookEventId:'qa_'+crypto.randomUUID(),type:'message',timestamp:Date.now(),source:{userId:'qa_synthetic_user'}}]);
+  log({test:'signed',verified,rejected,guarded,
+   pass:verified.status===200&&verified.json?.status==='verified'&&rejected.status===401&&rejected.json?.error==='INVALID_SIGNATURE'&&guarded.status===503&&guarded.json?.error==='DURABLE_INGESTION_NOT_READY',
+   note:'ทดสอบ metadata จำลอง ไม่มีข้อความหรือข้อมูลสุขภาพ ไม่บันทึก secret'});
+ }finally{key=null}
 });
 </script></html>
