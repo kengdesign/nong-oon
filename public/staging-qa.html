@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="th"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>น้องอุ่น · ทดสอบ staging</title>
+<style>body{font:16px system-ui,sans-serif;background:#f3f8f5;color:#163b2d;margin:0}main{max-width:850px;margin:40px auto;padding:24px;background:white;border-radius:20px}button{background:#176447;color:white;border:0;padding:14px 20px;border-radius:10px;cursor:pointer;margin:6px}button:disabled{opacity:.45;cursor:wait}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#edf3ef;padding:20px;border-radius:12px}small{display:block;line-height:1.7}</style>
+<main><h1>ทดสอบน้องอุ่นบน staging</h1><p>สำหรับผู้ดูแลที่ผ่าน Cloudflare Access แล้ว ใช้ข้อมูลจำลอง ไม่มีการส่ง LINE</p>
+<small>ทดสอบ Rate limit ครั้งละ 40 คำขอไป /health โดยไม่มี retry อัตโนมัติ เว้นอย่างน้อย 20 วินาทีก่อนทดสอบซ้ำ<br>ผล 302/หน้าล็อกอินไม่ถือว่าผ่าน ต้องได้รับ JSON จากแอป หรือ HTTP 429 จากกฎจำกัดคำขอ</small>
+<p><button id="basic">1. ตรวจระบบและ webhook</button><button id="burst">2. ทดสอบ 40 คำขอ</button><button id="recovery">3. ตรวจหลังพ้นเวลาบล็อก</button></p>
+<pre id="result" role="status" aria-live="polite">พร้อมทดสอบ</pre></main>
+<script type="module">
+const output=document.querySelector('#result');
+const buttons=[...document.querySelectorAll('button')];
+let busy=false, cooldown=0;
+const log=value=>{output.textContent=JSON.stringify(value,null,2)};
+async function request(path,options={}){
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(),15000);
+ try{
+  const response=await fetch(path,{...options,credentials:'same-origin',cache:'no-store',redirect:'manual',signal:controller.signal});
+  const text=await response.text();
+  let body;try{body=JSON.parse(text)}catch{}
+  return {status:response.status,json:body??null,redirect:response.type==='opaqueredirect',html:/<html|<!doctype/i.test(text)};
+ }catch(error){return {status:0,error:error.name}}finally{clearTimeout(timer)}
+}
+async function run(task){if(busy)return;busy=true;buttons.forEach(b=>b.disabled=true);try{await task()}catch(error){log({error:error.message})}finally{busy=false;buttons.forEach(b=>b.disabled=false)}}
+function assertHost(){if(location.hostname!=='staging.nongoon.com')throw Error('อนุญาตเฉพาะ staging.nongoon.com')}
+document.querySelector('#basic').onclick=()=>run(async()=>{
+ assertHost();
+ const health=await request('/health');
+ const webhook=await request('/webhook/line',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({events:[]})});
+ log({test:'basic',health,webhook,healthPass:health.status===200&&health.json?.deliveryEnabled===false,
+ unsignedWebhookRejected: (webhook.status===401&&webhook.json?.error==='INVALID_SIGNATURE')||(webhook.status===503&&webhook.json?.error==='NOT_CONFIGURED'),
+ note:'503 NOT_CONFIGURED หมายถึงยังไม่มี secret จึงยังไม่ได้ทดสอบตัวตรวจลายเซ็นบน staging'});
+});
+document.querySelector('#burst').onclick=()=>run(async()=>{
+ assertHost();if(Date.now()<cooldown)throw Error('กรุณารอให้ครบ 20 วินาทีแล้วทดสอบใหม่');
+ const start=performance.now();
+ const results=await Promise.all(Array.from({length:40},()=>request('/health')));
+ cooldown=Date.now()+20000;
+ const statuses={};for(const r of results)statuses[r.status]=(statuses[r.status]??0)+1;
+ log({test:'burst',requests:40,elapsedMs:Math.round(performance.now()-start),statuses,
+ appResponses:results.filter(r=>r.status===200&&r.json?.deliveryEnabled===false).length,
+ blocked429:results.filter(r=>r.status===429).length,
+ accessOrHtmlResponses:results.filter(r=>r.redirect||r.html).length,
+ rateLimitObserved:results.some(r=>r.status===429),
+ note:'ตรวจข้อ 3 หลังรออย่างน้อย 20 วินาที ไม่ retry อัตโนมัติ'});
+});
+document.querySelector('#recovery').onclick=()=>run(async()=>{
+ assertHost();if(Date.now()<cooldown)throw Error('กรุณารอให้ครบ 20 วินาทีหลังทดสอบ burst');
+ const result=await request('/health');log({test:'recovery',result,pass:result.status===200&&result.json?.deliveryEnabled===false});
+});
+</script></html>
