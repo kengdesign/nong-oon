@@ -4,7 +4,7 @@
 <main><h1>ทดสอบน้องอุ่นบน staging</h1><p>สำหรับผู้ดูแลที่ผ่าน Cloudflare Access แล้ว ใช้ข้อมูลจำลอง ไม่มีการส่ง LINE</p>
 <small>ทดสอบ Rate limit ครั้งละ 40 คำขอไป /health โดยไม่มี retry อัตโนมัติ เว้นอย่างน้อย 20 วินาทีก่อนทดสอบซ้ำ<br>ผล 302/หน้าล็อกอินไม่ถือว่าผ่าน ต้องได้รับ JSON จากแอป หรือ HTTP 429 จากกฎจำกัดคำขอ</small>
 <p><button id="basic">1. ตรวจระบบและ webhook</button><button id="burst">2. ทดสอบ 40 คำขอ</button><button id="recovery">3. ตรวจหลังพ้นเวลาบล็อก</button><button id="paced">4. ทดสอบเว้นจังหวะ 45 คำขอ</button></p>
-<p><label for="channelSecret">ทดสอบด้วย Channel secret (ไม่บันทึกค่า)</label><br><input id="channelSecret" type="password" autocomplete="off" spellcheck="false"><button id="signed">5. ทดสอบลายเซ็น</button></p><small>นำ Secret มาใส่เฉพาะตอนทดสอบ ค่าจะถูกล้างจากช่องทันทีที่กดข้อ 5 ใช้เซ็นคำขอในเบราว์เซอร์ ไม่มีการส่ง Secret เป็นข้อความในคำขอ ไม่มีการบันทึกลงฐานข้อมูลหรือ browser storage</small><pre id="result" role="status" aria-live="polite">พร้อมทดสอบ</pre></main>
+<p><label for="channelSecret">ทดสอบด้วย Channel secret (ไม่บันทึกค่า)</label><br><input id="channelSecret" type="password" autocomplete="off" spellcheck="false"><button id="signed">5. ทดสอบลายเซ็น</button><button id="inbox">6. ทดสอบบันทึก D1 จำลอง</button></p><small>นำ Secret มาใส่เฉพาะตอนทดสอบ ค่าจะถูกล้างจากช่องทันทีที่กดข้อ 5 หรือ 6 ใช้เซ็นคำขอในเบราว์เซอร์ ไม่มีการส่ง Secret เป็นข้อความในคำขอ ไม่มีการบันทึกลงฐานข้อมูลหรือ browser storage</small><pre id="result" role="status" aria-live="polite">พร้อมทดสอบ</pre></main>
 <script type="module">
 const output=document.querySelector('#result');
 const buttons=[...document.querySelectorAll('button')];
@@ -63,7 +63,7 @@ document.querySelector('#paced').onclick=()=>run(async()=>{
  blocked429:results.filter(r=>r.status===429).length,rateLimitObserved:results.some(r=>r.status===429),
  accessOrHtmlResponses:results.filter(r=>r.redirect||r.html).length,note:'แต่ละคำขอต่าง URL เว้น 200 ms ไม่มี retry ตรวจข้อ 3 หลังรอ 20 วินาที'});
 });
-document.querySelector('#signed').onclick=()=>run(async()=>{
+async function checkSigned(inbox=false){return run(async()=>{
  assertHost();
  const input=document.querySelector('#channelSecret');
  let secret=input.value;input.value='';
@@ -77,6 +77,18 @@ document.querySelector('#signed').onclick=()=>run(async()=>{
   return request('/webhook/line',{method:'POST',headers:{'content-type':'application/json','x-line-signature':btoa(String.fromCharCode(...digest))},body});
  }
  try{
+  if(inbox){
+   const eventId='qa_d1_'+crypto.randomUUID();
+   const fixture={webhookEventId:eventId,type:'follow',timestamp:Date.now()};
+   const first=await signedRequest([fixture]);
+   const duplicate=await signedRequest([fixture]);
+   const rejected=await signedRequest([fixture],false);
+   const guarded=await signedRequest([{...fixture,source:{userId:'qa_not_allowed'}}]);
+   log({test:'synthetic-inbox',eventId,first,duplicate,rejected,guarded,
+    handlerPass:first.status===200&&first.json?.status==='stored'&&duplicate.status===200&&duplicate.json?.status==='stored'&&rejected.status===401&&guarded.status===503,
+    databaseVerified:false,note:'ต้องตรวจ D1 ว่ามี eventId นี้เพียง 1 แถว user_id และ postback_data เป็น null; ผล HTTP ยังไม่ยืนยันจำนวนแถว ล้างข้อมูลจำลองหลังตรวจ'});
+   return;
+  }
   const verified=await signedRequest([]);
   const rejected=await signedRequest([],false);
   const guarded=await signedRequest([{webhookEventId:'qa_'+crypto.randomUUID(),type:'message',timestamp:Date.now(),source:{userId:'qa_synthetic_user'}}]);
@@ -84,5 +96,7 @@ document.querySelector('#signed').onclick=()=>run(async()=>{
    pass:verified.status===200&&verified.json?.status==='verified'&&rejected.status===401&&rejected.json?.error==='INVALID_SIGNATURE'&&guarded.status===503&&guarded.json?.error==='DURABLE_INGESTION_NOT_READY',
    note:'ทดสอบ metadata จำลอง ไม่มีข้อความหรือข้อมูลสุขภาพ ไม่บันทึก secret'});
  }finally{key=null}
-});
+});}
+document.querySelector('#signed').onclick=()=>checkSigned();
+document.querySelector('#inbox').onclick=()=>checkSigned(true);
 </script></html>

@@ -26,6 +26,7 @@
   "vars": {
     "APP_ENV": "staging",
     "DELIVERY_ENABLED": "false",
-    "INGESTION_ENABLED": "false"
+    "INGESTION_ENABLED": "false",
+    "SYNTHETIC_INGESTION_ENABLED": "false"
   }
 }
