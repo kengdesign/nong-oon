@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>น้องอุ่น · ตัวอย่างหน้าผู้ดูแล</title>
+  <link rel="stylesheet" href="./app.css">
+  <script type="module" src="./app.mjs"></script>
+</head>
+<body>
+  <a class="skip" href="#content">ข้ามไปเนื้อหา</a>
+  <header class="brand"><div class="brand-mark" aria-hidden="true">อุ่น</div><div><strong>น้องอุ่น <span>Nong Oon</span></strong><p>ใส่ใจคนที่คุณรัก ในทุกวัน</p></div><span class="demo-badge">DEMO</span></header>
+  <main id="content">
+    <aside class="notice"><strong>ตัวอย่างหน้าจอเท่านั้น</strong> ใช้ข้อมูลสมมติ ไม่ส่งแจ้งเตือน ไม่บันทึกข้อมูล และไม่ใช่คำแนะนำการใช้ยา</aside>
+    <section class="welcome"><div><p class="eyebrow">พื้นที่สำหรับผู้ดูแล</p><h1>วันนี้ ดูแลกันให้อุ่นใจ</h1><p>ข้อมูลสมมติของคุณแม่ · วันตัวอย่าง</p></div><div class="avatar" aria-hidden="true">ม</div></section>
+    <nav class="tabs" aria-label="ส่วนของหน้าผู้ดูแล"><button type="button" data-tab="today" aria-current="page">วันนี้</button><button type="button" data-tab="meds">รายการยา</button><button type="button" data-tab="caregivers">ผู้ดูแล</button></nav>
+    <section id="today" class="panel" aria-labelledby="today-title"><div class="section-heading"><h2 id="today-title">รอบยาวันนี้</h2><span id="summary"></span></div><p class="muted">สถานะแสดงสิ่งที่ผู้ใช้รายงาน ไม่ใช่หลักฐานว่าทานยาจริง</p><div id="doses"></div></section>
+    <section id="meds" class="panel" hidden aria-labelledby="meds-title"><h2 id="meds-title">รายการยาตัวอย่าง</h2><div class="info-card"><h3>ยาตัวอย่าง A</h3><p>ข้อมูลจำลองสำหรับตรวจรูปแบบหน้าจอเท่านั้น</p></div><div class="info-card"><h3>ยาตัวอย่าง B</h3><p>ระบบจริงต้องตรวจและยืนยันวิธีใช้ตามฉลากก่อนเปิดตารางเตือน</p></div></section>
+    <section id="caregivers" class="panel" hidden aria-labelledby="care-title"><h2 id="care-title">ผู้ดูแลในครอบครัว</h2><div class="info-card"><h3>ผู้ดูแลตัวอย่าง</h3><p>ดูสถานะและรับแจ้งเมื่อยังไม่ได้รับคำตอบ</p><span class="status">ตัวอย่างสิทธิ์ที่เจ้าของข้อมูลยินยอม</span></div><p>ระบบจริงจะเปิดเผยข้อมูลเมื่อได้รับความยินยอม และต้องถอนสิทธิ์ได้ หน้าตัวอย่างนี้ยังไม่มีการจับคู่บัญชี</p></section>
+    <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
+    <footer><button type="button" id="reset" class="secondary">เริ่มตัวอย่างใหม่</button><p>รีเฟรชหน้าจอแล้วข้อมูลตัวอย่างจะเริ่มใหม่<br>ยังไม่เชื่อม LINE หรือระบบเตือนจริง</p></footer>
+  </main>
+</body>
+</html>
