@@ -27,3 +27,13 @@ Tests exercise the actual exported scheduled handler with real SQLite: 105
 expired rows are removed in batches of 100 and 5, preserving a future row.
 Cloudflare deployment/trigger configuration is separate evidence from an actual
 scheduled execution. Do not report the latter as verified until it is observed.
+
+## Deployment-owned invocation logs
+
+Wrangler explicitly enables persisted invocation logs at full sampling for the
+low-traffic staging Worker, with traces disabled. This avoids a later Git deploy
+silently disabling a dashboard-only logging toggle. Do not log request bodies,
+channel secrets, reply tokens, user identifiers or medication data. Reassess
+sampling and quota before increasing staging traffic or any real-data pilot.
+Cron history plus an observed successful execution remains required evidence;
+turning on logging alone does not verify retention execution.
