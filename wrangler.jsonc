@@ -9,7 +9,9 @@
     "cpu_ms": 50
   },
   "triggers": {
-    "crons": ["17 * * * *"]
+    "crons": [
+      "17 * * * *"
+    ]
   },
   "assets": {
     "directory": "./public",
@@ -32,5 +34,15 @@
     "INGESTION_ENABLED": "false",
     "SYNTHETIC_INGESTION_ENABLED": "false",
     "RETENTION_ENABLED": "true"
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "invocation_logs": true,
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": false
+    }
   }
 }

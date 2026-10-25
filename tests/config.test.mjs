@@ -30,3 +30,10 @@ test('collection and outbound delivery remain disabled with only bounded retenti
 test('static UI does not invoke the Worker before asset serving', () => {
   assert.deepEqual(config.assets.run_worker_first, ['/webhook/*', '/health']);
 });
+
+test('staging invocation logs persist across repository deployments', () => {
+  assert.equal(config.observability.enabled, true);
+  assert.equal(config.observability.logs.invocation_logs, true);
+  assert.equal(config.observability.logs.head_sampling_rate, 1);
+  assert.equal(config.observability.traces.enabled, false);
+});
