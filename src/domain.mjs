@@ -5,18 +5,26 @@ export class DomainError extends Error {
 const fail = (code) => { throw new DomainError(code); };
 const text = (value) => typeof value === 'string' && value.trim().length > 0;
 const states = new Set(['pending', 'reported_taken', 'reported_not_taken', 'cancelled']);
+const validBase = (dose) => dose && text(dose.patientId) && text(dose.doseId)
+  && Number.isSafeInteger(dose.scheduleVersion) && dose.scheduleVersion >= 1
+  && Number.isSafeInteger(dose.dueAt) && Number.isSafeInteger(dose.expiresAt) && dose.expiresAt > dose.dueAt;
+const validStored = (dose) => validBase(dose) && states.has(dose.status)
+  && (['pending', 'cancelled'].includes(dose.status)
+    ? dose.reportedBy === null && dose.reportedAt === null
+    : text(dose.reportedBy) && Number.isSafeInteger(dose.reportedAt)
+      && dose.reportedAt >= dose.dueAt && dose.reportedAt < dose.expiresAt);
 export function createDose({ patientId, doseId, scheduleVersion, dueAt, expiresAt }) {
-  if (!text(patientId) || !text(doseId) || !Number.isSafeInteger(scheduleVersion) || scheduleVersion < 1
-    || !Number.isSafeInteger(dueAt) || !Number.isSafeInteger(expiresAt) || expiresAt <= dueAt) fail('INVALID_DOSE');
+  if (!validBase({ patientId, doseId, scheduleVersion, dueAt, expiresAt })) fail('INVALID_DOSE');
   return Object.freeze({ patientId, doseId, scheduleVersion, dueAt, expiresAt, status: 'pending', reportedBy: null, reportedAt: null });
 }
 /** Authorization is supplied by the server's trusted consent/identity layer, never request payload. */
-export function transitionDose(dose, command, { actorId, authorizedPatientIds, currentScheduleVersion, now }) {
+export function transitionDose(dose, command, { actorId, authorizedPatientIds, allowedActions, currentScheduleVersion, now }) {
+  if (!validStored(dose) || !Number.isSafeInteger(now)) fail('INVALID_STATE');
   if (!text(actorId) || !Array.isArray(authorizedPatientIds) || !authorizedPatientIds.includes(dose.patientId)) fail('FORBIDDEN');
-  if (!states.has(dose.status) || !Number.isSafeInteger(now)) fail('INVALID_STATE');
+  if (!command || !['report_taken', 'report_not_taken', 'cancel'].includes(command.type)) fail('INVALID_COMMAND');
+  if (!Array.isArray(allowedActions) || !allowedActions.includes(command.type)) fail('FORBIDDEN');
   if (command.patientId !== dose.patientId || command.doseId !== dose.doseId) fail('DOSE_MISMATCH');
   if (command.scheduleVersion !== dose.scheduleVersion || currentScheduleVersion !== dose.scheduleVersion) fail('STALE_SCHEDULE');
-  if (!['report_taken', 'report_not_taken', 'cancel'].includes(command.type)) fail('INVALID_COMMAND');
   if (command.type === 'cancel') {
     if (dose.status === 'cancelled') return dose;
     if (dose.status !== 'pending') fail('ALREADY_REPORTED');
