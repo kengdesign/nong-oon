@@ -1,4 +1,4 @@
-// Bounded maintenance primitive. No public endpoint, scheduler or retry loop.
+// Bounded maintenance primitive. No public endpoint or retry loop.
 export const MAX_PURGE_ROWS = 100;
 export async function purgeExpiredInbox(db, now, limit = MAX_PURGE_ROWS) {
   if (!Number.isSafeInteger(now) || now < 0 || !Number.isInteger(limit)
