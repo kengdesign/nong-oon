@@ -1,4 +1,5 @@
 import { projectEvents, persistEvents } from './ingestion.mjs';
+import { handleScheduled } from './maintenance.mjs';
 // Foundation adapter: ingestion only, with outbound delivery disabled.
 export const MAX_WEBHOOK_BYTES = 64 * 1024;
 const json = (status, value) => new Response(JSON.stringify(value), {
@@ -67,4 +68,4 @@ export async function handleRequest(request, env = {}) {
   try { await persistEvents(env.DB, rows); } catch { return json(503, { error: 'DURABLE_INGESTION_UNAVAILABLE' }); }
   return json(200, { status: 'stored' });
 }
-export default { fetch: handleRequest };
+export default { fetch: handleRequest, scheduled: handleScheduled };
