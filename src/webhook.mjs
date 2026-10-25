@@ -1,4 +1,5 @@
-// Foundation adapter: real events deliberately fail until durable ingestion exists.
+import { projectEvents, persistEvents } from './ingestion.mjs';
+// Foundation adapter: ingestion only, with outbound delivery disabled.
 export const MAX_WEBHOOK_BYTES = 64 * 1024;
 const json = (status, value) => new Response(JSON.stringify(value), {
   status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
@@ -47,7 +48,11 @@ export async function handleRequest(request, env = {}) {
   try { payload = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); } catch { return bad('INVALID_JSON'); }
   if (!payload || !Array.isArray(payload.events)) return bad('INVALID_EVENTS');
   if (payload.events.length === 0) return json(200, { status: 'verified' });
-  // Never acknowledge real events before durable persistence is implemented.
-  return json(503, { error: 'DURABLE_INGESTION_NOT_READY' });
+  let rows;
+  try { rows = projectEvents(payload.events, Date.now()); } catch { return bad('INVALID_EVENTS'); }
+  // Explicit opt-in prevents accidental collection before retention/privacy setup.
+  if (env.INGESTION_ENABLED !== 'true') return json(503, { error: 'DURABLE_INGESTION_NOT_READY' });
+  try { await persistEvents(env.DB, rows); } catch { return json(503, { error: 'DURABLE_INGESTION_UNAVAILABLE' }); }
+  return json(200, { status: 'stored' });
 }
 export default { fetch: handleRequest };
