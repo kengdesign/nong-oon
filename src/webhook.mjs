@@ -5,6 +5,18 @@ const json = (status, value) => new Response(JSON.stringify(value), {
   status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
 });
 const bad = (code) => json(400, { error: code });
+// Staging-only fixture lane. Never accepts identities, text, postbacks or tokens.
+function syntheticFixture(payload, request, env) {
+  if (env.APP_ENV !== 'staging' || env.DELIVERY_ENABLED !== 'false'
+    || env.SYNTHETIC_INGESTION_ENABLED !== 'true'
+    || new URL(request.url).hostname !== 'staging.nongoon.com') return false;
+  if (Object.keys(payload).length !== 1 || payload.events.length !== 1) return false;
+  const event = payload.events[0];
+  return event && Object.keys(event).sort().join(',') === 'timestamp,type,webhookEventId'
+    && event.type === 'follow'
+    && /^qa_d1_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(event.webhookEventId)
+    && Number.isSafeInteger(event.timestamp) && event.timestamp >= 0;
+}
 async function readBounded(request) {
   const declared = request.headers.get('content-length');
   if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > MAX_WEBHOOK_BYTES)) return null;
@@ -51,7 +63,7 @@ export async function handleRequest(request, env = {}) {
   let rows;
   try { rows = projectEvents(payload.events, Date.now()); } catch { return bad('INVALID_EVENTS'); }
   // Explicit opt-in prevents accidental collection before retention/privacy setup.
-  if (env.INGESTION_ENABLED !== 'true') return json(503, { error: 'DURABLE_INGESTION_NOT_READY' });
+  if (env.INGESTION_ENABLED !== 'true' && !syntheticFixture(payload, request, env)) return json(503, { error: 'DURABLE_INGESTION_NOT_READY' });
   try { await persistEvents(env.DB, rows); } catch { return json(503, { error: 'DURABLE_INGESTION_UNAVAILABLE' }); }
   return json(200, { status: 'stored' });
 }
