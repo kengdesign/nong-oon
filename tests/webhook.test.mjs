@@ -34,7 +34,7 @@ test('declared oversized body rejected', async () => {
   assert.equal((await handleRequest(request('{}', sign('{}'), { 'content-length': String(MAX_WEBHOOK_BYTES + 1) }), env)).status, 413);
 });
 test('verified nonempty events never acknowledged until durable ingestion ready', async () => {
-  const r = await handleRequest(request('{"events":[{"type":"message"}]}'), env);
+  const r = await handleRequest(request('{"events":[{"webhookEventId":"test-event","type":"message","timestamp":1}]}'), env);
   assert.equal(r.status, 503); assert.equal((await r.json()).error, 'DURABLE_INGESTION_NOT_READY');
 });
 test('malformed signed JSON and invalid events rejected', async () => {
