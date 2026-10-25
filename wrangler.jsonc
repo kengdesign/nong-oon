@@ -3,7 +3,11 @@
   "main": "src/webhook.mjs",
   "compatibility_date": "2026-10-25",
   "account_id": "c5f673e7bdf271485603029e19f42f49",
-  "workers_dev": true,
+  "workers_dev": false,
+  "preview_urls": false,
+  "limits": {
+    "cpu_ms": 50
+  },
   "assets": {
     "directory": "./public",
     "run_worker_first": [
@@ -21,6 +25,7 @@
   ],
   "vars": {
     "APP_ENV": "staging",
-    "DELIVERY_ENABLED": "false"
+    "DELIVERY_ENABLED": "false",
+    "INGESTION_ENABLED": "false"
   }
 }
