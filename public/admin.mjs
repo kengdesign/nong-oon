@@ -71,6 +71,14 @@ async function render() {
   const status=await api('/api/admin/status');
   const health=node('ul',null);
   health.append(node('li',`สภาพแวดล้อม: ${status.environment}`),node('li',`ส่ง LINE: ${status.deliveryEnabled?'เปิด':'ปิด'}`),node('li',`จัดรอบยา: ${status.schedulerEnabled?'เปิด':'ปิด'}`));
+  if(status.delivery) {
+    const labels={disabled:'ปิดการส่ง',scheduled:'ตั้งเวลาแล้ว รอเริ่มทดลอง',active:'อยู่ในช่วงทดลองส่ง',expired:'ครบเวลาทดลองแล้ว หยุดส่งอัตโนมัติ',invalid:'ยังส่งไม่ได้ กรุณาตรวจการตั้งเวลาทดลอง'};
+    health.append(node('li',`รอบทดลอง LINE: ${labels[status.delivery.state]??'ไม่ทราบสถานะ'}`));
+    if(status.delivery.startAt!==null && status.delivery.stopAt!==null) {
+      health.append(node('li',`เริ่ม: ${time(status.delivery.startAt)} น. (เวลาไทย)`),node('li',`หยุดอัตโนมัติ: ${time(status.delivery.stopAt)} น. (เวลาไทย)`));
+    }
+    health.append(node('li','สถานะนี้แสดงช่วงเวลาที่อนุญาตให้ส่ง ไม่ใช่การยืนยันว่าได้รับข้อความแล้ว'));
+  }
   for(const item of status.operations) health.append(node('li',`${item.task}: สำเร็จล่าสุด ${time(item.lastOkAt)}`));
   view.append(card('สถานะบริการ',health),button('รีเฟรช',render));
   if(admin.role!=='owner') return;
