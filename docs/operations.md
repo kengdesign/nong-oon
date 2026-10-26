@@ -209,3 +209,29 @@ Later verified on 26 October 2026:
 All evidence above describes the selected staging deployment, not production.
 No medication labels, account identifiers, provider credentials or health rows
 are recorded in this runbook.
+
+## Bounded staging delivery window
+
+Staging delivery additionally requires DELIVERY_START_AT and DELIVERY_STOP_AT,
+expressed as decimal Unix milliseconds. Both must be safe integers with
+0 < start < stop and a duration no greater than 24 hours. Missing/malformed
+values, a future start or an expired stop disable outbound attempts even when
+DELIVERY_ENABLED is true. Existing recipient allowlist and hard daily attempt
+budgets remain required and unchanged. Retain DELIVERY_ENABLED=false and an
+empty allowlist until the owner explicitly chooses the recipient and window.
+
+The sender checks the window on entry, before claiming each job and immediately
+before HTTP after database awaits. On deadline crossing after a claim, it clears
+the lease and preserves the reserved attempt, retry identity and payload hash;
+it does not reset budgets or send. Requests initiated before the deadline cannot
+be recalled and may complete after it. Public and authenticated status report
+the effective switch/window gate; they do not certify token or LINE availability.
+Scheduling may continue to materialize rounds while delivery is closed. Future
+window starts are reached by normal five-minute recovery; no exact start-second
+promise is made. Expired reminders retain the existing late-job policy.
+
+Checks: 128 local tests pass, including exclusive deadline boundaries, malformed
+and oversized windows, zero database/network work when closed, and a deadline
+crossing during final database verification. These tests use synthetic identities
+and mocked HTTP; they do not establish a live timed pilot. Never enable a new
+window automatically after expiry or add recipients during a documentation deploy.

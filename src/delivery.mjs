@@ -8,8 +8,18 @@ const validNow = value => Number.isSafeInteger(value) && value >= 0;
 const ok = result => { if (result?.success !== true) throw Error('OUTBOX_STORAGE_FAILED'); return result; };
 const all = async statement => { const result = ok(await statement.all()); if (!Array.isArray(result.results)) throw Error('OUTBOX_STORAGE_FAILED'); return result.results; };
 
-export function deliveryConfig(env) {
-  if (env.DELIVERY_ENABLED !== 'true' || env.SCHEDULER_ENABLED !== 'true') return null;
+// Staging sending is always a bounded pilot. Unix milliseconds, at most 24 hours.
+// Missing, malformed, future and expired windows fail closed without network calls.
+export function deliveryWindowOpen(env, now = Date.now()) {
+  if (env.DELIVERY_ENABLED !== 'true' || env.SCHEDULER_ENABLED !== 'true' || !validNow(now)) return false;
+  if (env.APP_ENV !== 'staging' && env.DELIVERY_START_AT === undefined && env.DELIVERY_STOP_AT === undefined) return true;
+  const stamp = value => typeof value === 'string' && /^[1-9][0-9]{0,15}$/.test(value) ? Number(value) : NaN;
+  const start = stamp(env.DELIVERY_START_AT), stop = stamp(env.DELIVERY_STOP_AT);
+  return validNow(start) && validNow(stop) && stop > start && stop - start <= 86_400_000 && now >= start && now < stop;
+}
+
+export function deliveryConfig(env, now = Date.now()) {
+  if (!deliveryWindowOpen(env, now)) return null;
   let recipients, origin;
   try { recipients = JSON.parse(env.LIVE_LINE_RECIPIENTS); origin = new URL(env.APP_ORIGIN); } catch { return null; }
   if (!Array.isArray(recipients) || recipients.length < 1 || recipients.length > 10 || recipients.some(value => !lineId(value))
@@ -63,7 +73,7 @@ const eligible = `EXISTS(SELECT 1 FROM patients p JOIN care_schedules c ON c.pat
 
 export async function deliverPatientOutbox(db, patientId, now, env, { fetcher = fetch, clock = Date.now } = {}) {
   if (!id(patientId) || !validNow(now)) throw Error('INVALID_DELIVERY_INPUT');
-  const config = deliveryConfig(env);
+  const config = deliveryConfig(env, Math.max(now, clock()));
   if (!config) return { sent: 0, retried: 0, dead: 0, deliverySkipped: true };
   // Terminalize expired, stale, revoked and exhausted rows before selecting work.
   ok(await db.prepare(`UPDATE notification_outbox SET status=CASE WHEN expires_at<=? OR attempts>=? THEN 'dead' ELSE 'cancelled' END,
@@ -80,6 +90,7 @@ export async function deliverPatientOutbox(db, patientId, now, env, { fetcher = 
   for (const job of candidates) {
     const attemptNow = Math.max(now, clock());
     if (!validNow(attemptNow)) throw Error('INVALID_CLOCK');
+    if (!deliveryWindowOpen(env, attemptNow)) break;
     if (!config.recipients.includes(job.line_user_id)) continue;
     const text = notificationText(job.kind, config.origin);
     const payload = JSON.stringify({ to: job.line_user_id, messages: [{ type: 'text', text }] });
@@ -118,6 +129,12 @@ export async function deliverPatientOutbox(db, patientId, now, env, { fetcher = 
       ok(await db.prepare(`UPDATE notification_outbox SET status='cancelled',last_code='INELIGIBLE',lease_token=NULL,lease_until=NULL
         WHERE id=? AND lease_token=?`).bind(job.id, lease).run());
       continue;
+    }
+    // Recheck after database awaits: an invocation may cross the pilot deadline.
+    if (!deliveryWindowOpen(env, Math.max(attemptNow, clock()))) {
+      ok(await db.prepare(`UPDATE notification_outbox SET status='pending',lease_token=NULL,lease_until=NULL,last_code='WINDOW_CLOSED'
+        WHERE id=? AND status='sending' AND lease_token=?`).bind(job.id, lease).run());
+      break;
     }
     const outcome = await sendLineNotification({ to: job.line_user_id, retryKey: job.id, text }, { token: config.token, fetcher });
     const attempts = job.attempts + 1;

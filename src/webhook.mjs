@@ -6,6 +6,7 @@ import { armPatient } from './scheduler.mjs';
 import { processLineEvents } from './line-events.mjs';
 import { secure, boundedRequest } from './http.mjs';
 import { handleAdminApi } from './admin-api.mjs';
+import { deliveryWindowOpen } from './delivery.mjs';
 export { PatientClock } from './patient-clock.mjs';
 export const MAX_WEBHOOK_BYTES = 64 * 1024;
 const json = (status, value) => new Response(JSON.stringify(value), {
@@ -55,10 +56,10 @@ async function verified(bytes, signature, secret) {
 }
 async function route(request, env = {}, context = {}) {
   const path = new URL(request.url).pathname;
-  if (path === '/health' && request.method === 'GET') return json(200, { status: 'staging', deliveryEnabled: env.DELIVERY_ENABLED === 'true' });
+  if (path === '/health' && request.method === 'GET') return json(200, { status: 'staging', deliveryEnabled: deliveryWindowOpen(env) });
   if (path === '/api/session' && request.method === 'GET') {
     const features = { sharingEnabled: env.SELF_CARE_ONLY !== 'true', careEnabled: env.CARE_API_ENABLED === 'true', schedulerEnabled: env.SCHEDULER_ENABLED === 'true',
-      deliveryEnabled: env.DELIVERY_ENABLED === 'true',
+      deliveryEnabled: deliveryWindowOpen(env),
       loginConfigured: /^\d{5,20}$/.test(env.LINE_LOGIN_CHANNEL_ID ?? '') && Boolean(env.LINE_LOGIN_CHANNEL_SECRET?.trim()) };
     let identity = null;
     try { identity = await authenticate(request, env); }

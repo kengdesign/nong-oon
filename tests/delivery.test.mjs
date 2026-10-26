@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createTestDb } from './helpers/db.mjs';
 import { materializePatient, bangkokInstant, nextWake } from '../src/scheduler.mjs';
-import { deliveryConfig, notificationText, sendLineNotification, deliverPatientOutbox, LEASE_MS } from '../src/delivery.mjs';
+import { deliveryConfig, deliveryWindowOpen, notificationText, sendLineNotification, deliverPatientOutbox, LEASE_MS } from '../src/delivery.mjs';
 
 const owner = `U${'1'.repeat(32)}`, caregiver = `U${'2'.repeat(32)}`;
 const at = time => bangkokInstant('2026-10-26', time);
@@ -21,6 +21,53 @@ async function fixture() {
 }
 const deliver = (f, now = at('08:00'), options = {}, config = env) => deliverPatientOutbox(f.db, 'p1', now, config, { clock: () => now, ...options });
 const ownerJob = f => f.sql.prepare("SELECT * FROM notification_outbox WHERE recipient_actor_id=? ORDER BY available_at LIMIT 1").get(owner);
+
+test('staging delivery requires a valid at-most-24-hour window with an exclusive stop', () => {
+  const start=at('08:00'), stop=at('09:00');
+  const pilot={...env,APP_ENV:'staging',DELIVERY_START_AT:String(start),DELIVERY_STOP_AT:String(stop)};
+  assert.equal(deliveryConfig({...env,APP_ENV:'staging'},start),null);
+  assert.equal(deliveryConfig(pilot,start-1),null);
+  assert.ok(deliveryConfig(pilot,start));
+  assert.ok(deliveryConfig(pilot,stop-1));
+  assert.equal(deliveryConfig(pilot,stop),null);
+  for(const changes of [{DELIVERY_START_AT:''},{DELIVERY_START_AT:'NaN'},{DELIVERY_START_AT:' 123'},
+    {DELIVERY_STOP_AT:String(start)},{DELIVERY_STOP_AT:String(start-1)},
+    {DELIVERY_STOP_AT:String(start+86_400_001)},{DELIVERY_STOP_AT:'9007199254740992'},
+    {DELIVERY_ENABLED:'false'},{SCHEDULER_ENABLED:'false'}]) {
+    assert.equal(deliveryWindowOpen({...pilot,...changes},start),false);
+  }
+});
+
+test('closed pilot does not touch the outbox or network', async () => {
+  const now=at('08:00');
+  const db={prepare(){throw Error('unexpected SQL');}};
+  const result=await deliverPatientOutbox(db,'p1',now,{...env,APP_ENV:'staging'},
+    {clock:()=>now,fetcher:()=>{throw Error('unexpected network');}});
+  assert.equal(result.deliverySkipped,true);
+});
+
+test('pilot deadline crossing during final database check prevents HTTP and releases the lease', async () => {
+  const f=await fixture();let now=at('08:00'), calls=0;const stop=at('08:01');
+  const pilot={...env,APP_ENV:'staging',DELIVERY_START_AT:String(now),DELIVERY_STOP_AT:String(stop)};
+  const db={prepare(sql){
+    const statement=f.db.prepare(sql);
+    if(sql.startsWith('SELECT id FROM notification_outbox')) {
+      const bind=statement.bind.bind(statement);
+      statement.bind=(...args)=>{const bound=bind(...args),first=bound.first.bind(bound);
+        bound.first=async()=>{const row=await first();now=stop;return row;};return bound;};
+    }
+    return statement;
+  }};
+  try {
+    await deliverPatientOutbox(db,'p1',now,pilot,{clock:()=>now,fetcher:async()=>{calls++;return new Response('{}');}});
+    assert.equal(calls,0);
+    const job=ownerJob(f);
+    assert.equal(job.status,'pending');
+    assert.equal(job.last_code,'WINDOW_CLOSED');
+    assert.equal(job.lease_token,null);
+    assert.equal(job.attempts,1); // Retain conservative quota reservation and retry identity.
+  } finally {f.close();}
+});
 
 test('delivery configuration fails closed without both gates, token and a bounded explicit allowlist', () => {
   assert.ok(deliveryConfig(env));
