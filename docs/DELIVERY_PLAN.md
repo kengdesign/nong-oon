@@ -60,10 +60,30 @@ was sent during these checks.
 - Test caregiver invitation acceptance, visibility, reporting and revocation with
   a separately selected and authorized LINE account. No caregiver is currently
   linked. Do not invent a recipient or grant access to the owner's data.
-- Complete an isolated remote D1 restore drill in a separate unbound database,
-  with no LINE credentials or sending capability. Do not restore over staging.
 - Measure actual Cloudflare request/CPU budgets at pilot load. Keep local load
   evidence separate from platform measurements.
 - Review recipients and duration before continuous delivery; the successful
   one-off test does not mean ongoing reminders are enabled.
 - Keep public production access disabled until the remaining gates are reviewed.
+
+## Isolated remote D1 Time Travel drill — 26 October 2026
+
+Created nong-oon-restore-review as a separate database, with no Worker binding,
+LINE credentials or route. Applied all seven schema migrations. The schema has
+20 application tables (plus the D1 internal table), 21 explicit indexes and six
+triggers. No staging records were exported or copied.
+
+Seeded only synthetic account/profile/schedule/dose data, one trigger-generated
+report audit and one synthetic sent receipt. No HTTP push was made; the receipt
+is a database fixture and does not claim LINE acceptance. Saved a Time Travel
+bookmark, changed a marker from 1 to 2, then restored the isolated database to
+the saved bookmark. The marker returned to 1, the report/audit join remained
+consistent, and the sent receipt ID, payload hash and timestamp were preserved.
+Foreign-key check returned zero violations and PRAGMA quick_check returned ok.
+Recovery bookmarks are kept out of this repository. Staging was not restored.
+
+This establishes real remote D1 Time Travel on a synthetic isolated database.
+It does not establish restoration of actual user data, reconciliation of real
+outbound sends, an SQL export/import drill, or maximum-pilot platform load.
+The isolated database is retained for subsequent checks and is not bound to the
+application. No additional plan or subscription was enabled.
