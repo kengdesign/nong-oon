@@ -31,14 +31,39 @@ OCR, voice recognition, medication identification, dose recommendation, payments
 
 ## Latest staging verification — 26 October 2026
 
-PR12–14 are merged and deployed. Real LINE Login, owner consent/profile,
-schedule persistence and future dose-round materialization were observed in the
-staging browser. Scheduling is enabled; real/synthetic webhook ingestion and
-outbound delivery remain disabled. Four owner-entered test schedules materialized
-without manual database insertion. The local/CI suite passes 114 tests.
+PR12–16 are merged. Real LINE Login, consented self-profile creation,
+schedule persistence and round materialization were observed on staging.
 
-Pending release gates: Messaging API access-token creation and encrypted storage,
-reviewed pilot recipient configuration, one actual reminder and authenticated
-report, caregiver workflow with a separately authorized test account, and an
-isolated remote restore drill. Do not infer live receipt from successful local
-HTTP mocks or from the dashboard's dose rounds.
+The owner-approved synthetic reminder due at 12:10 Bangkok was accepted by LINE
+at 12:10:01, with persisted status sent / ACCEPTED and one attempt. The synthetic
+round has a not-taken report and one audit record. The owner subsequently
+confirmed in chat that the scheduled message arrived. Receipt of a test message
+does not establish medication consumption.
+
+The Messaging API token is stored as a Cloudflare encrypted secret. After the
+test, outbound delivery was disabled and the pilot recipient list cleared.
+Scheduling remains enabled; real/synthetic webhook ingestion remains disabled.
+Both synthetic schedules end on 2026-10-26 and do not recur after that date.
+Owner-entered schedules are preserved.
+
+Current local verification: npm run check and all 115 tests pass, including D1
+trigger-inclusive lease claims, isolated SQLite restore and maximum-pilot load.
+These local results do not establish remote D1 restore success or Cloudflare CPU
+limits at maximum pilot load.
+
+Live read-only checks show retention last succeeded at 12:17:20 Bangkok and
+scheduler recovery at 12:25:30, with no recorded recovery failure. No notification
+was sent during these checks.
+
+## Remaining release gates
+
+- Test caregiver invitation acceptance, visibility, reporting and revocation with
+  a separately selected and authorized LINE account. No caregiver is currently
+  linked. Do not invent a recipient or grant access to the owner's data.
+- Complete an isolated remote D1 restore drill in a separate unbound database,
+  with no LINE credentials or sending capability. Do not restore over staging.
+- Measure actual Cloudflare request/CPU budgets at pilot load. Keep local load
+  evidence separate from platform measurements.
+- Review recipients and duration before continuous delivery; the successful
+  one-off test does not mean ongoing reminders are enabled.
+- Keep public production access disabled until the remaining gates are reviewed.
