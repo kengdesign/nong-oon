@@ -7,6 +7,7 @@ const feedback = $('#feedback');
 const timezone = 'Asia/Bangkok';
 const dayNames = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
 const state = { session: null, patients: [], patient: null, schedules: [], doses: [], members: [], currentVersion: 1, tab: 'today', busy: false, showHistory: false };
+const sharingEnabled = () => state.session?.features?.sharingEnabled === true;
 const labels = { pending: 'รอการตอบรับ', reported_taken: 'รายงานว่าทานแล้ว', reported_not_taken: 'รายงานว่ายังไม่ทาน', cancelled: 'ยกเลิกรอบนี้แล้ว' };
 const errors = {
   UNAUTHENTICATED: 'หมดเวลาเข้าใช้แล้ว กรุณาเข้าใช้ผ่าน LINE อีกครั้ง',
@@ -18,6 +19,7 @@ const errors = {
   STALE_SCHEDULE: 'ตารางยามีการเปลี่ยนแปลงแล้ว กรุณาตรวจข้อมูลล่าสุดอีกครั้ง',
   VERSION_CONFLICT: 'ตารางยามีการเปลี่ยนแปลงแล้ว กรุณาตรวจข้อมูลล่าสุดอีกครั้ง',
   COMMAND_REJECTED: 'รอบยานี้เปลี่ยนสถานะแล้ว หรืออยู่นอกช่วงเวลารับคำตอบ กรุณาตรวจข้อมูลล่าสุด',
+  SHARING_DISABLED: 'ขณะนี้เปิดใช้สำหรับดูแลตัวเอง ยังไม่เปิดเชิญผู้ดูแล',
   INVITE_INVALID: 'รหัสเชิญไม่ถูกต้อง หมดอายุ หรือถูกใช้แล้ว',
   INVALID_INVITE: 'รหัสเชิญไม่ถูกต้อง หมดอายุ หรือถูกใช้แล้ว',
   CONSENT_REQUIRED: 'ต้องให้ความยินยอมก่อนใช้พื้นที่ดูแล',
@@ -113,7 +115,7 @@ function renderLogin() {
   const configured = state.session?.features?.loginConfigured && state.session?.features?.careEnabled;
   const login = configured ? el('a', { href: '/auth/login', class: 'button primary' }, 'เข้าใช้ผ่าน LINE') : button('เข้าใช้ผ่าน LINE', () => {}, 'primary', { disabled: true });
   view.replaceChildren(
-    el('section', { class: 'hero' }, el('div', {}, text('p', 'พื้นที่เล็ก ๆ สำหรับความใส่ใจ', 'eyebrow'), text('h1', 'เรื่องยาในทุกวัน\nดูแลกันให้อุ่นใจ'), text('p', 'จัดตารางเตือน บันทึกการตอบรับ และชวนคนในครอบครัวมาช่วยดูแล โดยคุณเป็นคนเลือกสิทธิ์การเข้าถึง'), login, configured ? text('p', 'เข้าใช้ด้วยบัญชี LINE ของคุณ ไม่ต้องตั้งรหัสผ่านเพิ่ม', 'hint') : text('p', 'กำลังเตรียมระบบเข้าใช้ เมื่อพร้อมแล้วปุ่มนี้จะเปิดให้ใช้งาน', 'hint')),
+    el('section', { class: 'hero' }, el('div', {}, text('p', 'พื้นที่เล็ก ๆ สำหรับความใส่ใจ', 'eyebrow'), text('h1', 'เรื่องยาในทุกวัน\nดูแลกันให้อุ่นใจ'), text('p', sharingEnabled() ? 'จัดตารางเตือน บันทึกการตอบรับ และชวนคนในครอบครัวมาช่วยดูแล โดยคุณเป็นคนเลือกสิทธิ์การเข้าถึง' : 'จัดตารางเตือนและบันทึกการตอบรับของคุณ ใช้บัญชี LINE เดียวเริ่มดูแลตัวเองได้'), login, configured ? text('p', 'เข้าใช้ด้วยบัญชี LINE ของคุณ ไม่ต้องตั้งรหัสผ่านเพิ่ม', 'hint') : text('p', 'กำลังเตรียมระบบเข้าใช้ เมื่อพร้อมแล้วปุ่มนี้จะเปิดให้ใช้งาน', 'hint')),
       el('div', { class: 'hero-art', 'aria-hidden': 'true' }, el('img', { class: 'hero-logo', src: '/logo-nongoon.png', alt: '', width: '290', height: '290' }))),
     serviceNotice(),
     el('section', { class: 'steps', 'aria-label': 'เริ่มใช้น้องอุ่น' }, ...[['01', 'เริ่มจากตัวคุณ', 'เข้าใช้ผ่าน LINE แล้วให้ความยินยอมสำหรับข้อมูลของคุณเอง'], ['02', 'ตั้งตามฉลากยา', 'ใส่ชื่อยา วิธีใช้ และเวลาที่คุณตรวจสอบแล้ว'], ['03', 'ดูแลไปด้วยกัน', 'บันทึกการตอบรับ หรือเชิญผู้ดูแลที่คุณไว้ใจ']].map(([number, title, description]) => el('article', { class: 'step' }, text('span', number, 'number'), text('h3', title), text('p', description)))),
@@ -143,17 +145,18 @@ function acceptInviteForm() {
 }
 function renderOnboarding() {
   view.replaceChildren(el('section', { class: 'welcome' }, el('div', {}, text('p', 'ยินดีต้อนรับสู่น้องอุ่น', 'eyebrow'), text('h1', 'เริ่มดูแลกันได้จากตรงนี้')), button('ออกจากระบบ', logout, 'secondary compact')), ...[serviceNotice()].filter(Boolean),
-    card('สร้างพื้นที่ดูแลของฉัน', [profileForm()]), card('ได้รับคำเชิญจากคนในครอบครัว?', [acceptInviteForm()]));
+    card('สร้างพื้นที่ดูแลของฉัน', [profileForm()]), ...(sharingEnabled() ? [card('ได้รับคำเชิญจากคนในครอบครัว?', [acceptInviteForm()])] : []));
 }
 function selectedPath(suffix = '') { return `/api/patients/${encodeURIComponent(state.patient.id)}${suffix}`; }
 function showTab(tab) { state.tab = tab; renderDashboard(); }
 function renderDashboard() {
   const owner = state.patient.role === 'owner';
+  if (!sharingEnabled() && state.tab === 'family') state.tab = 'today';
   const selector = el('select', { 'aria-label': 'เลือกพื้นที่ดูแล', onchange: event => task(() => loadPatient(event.target.value), event.target) }, ...state.patients.map(p => el('option', { value: p.id, selected: p.id === state.patient.id ? 'selected' : null }, `${p.displayName}${p.role === 'owner' ? ' · ฉัน' : ' · ผู้ดูแล'}`)));
-  const nav = el('nav', { class: 'tabs', 'aria-label': 'พื้นที่ดูแล' }, ...[['today', 'รอบยา'], ['meds', 'ตารางยา'], ['family', 'ผู้ดูแล'], ['settings', 'ตั้งค่า']].map(([id, label]) => button(label, () => showTab(id), '', { 'aria-current': state.tab === id ? 'page' : null })));
+  const nav = el('nav', { class: 'tabs', 'aria-label': 'พื้นที่ดูแล' }, ...[['today', 'รอบยา'], ['meds', 'ตารางยา'], ['family', 'ผู้ดูแล'], ['settings', 'ตั้งค่า']].filter(([id]) => id !== 'family' || sharingEnabled()).map(([id, label]) => button(label, () => showTab(id), '', { 'aria-current': state.tab === id ? 'page' : null })));
   const panel = state.tab === 'today' ? todayPanel() : state.tab === 'meds' ? schedulesPanel(owner) : state.tab === 'family' ? familyPanel(owner) : settingsPanel(owner);
   view.replaceChildren(el('section', { class: 'welcome' }, el('div', {}, text('p', dateLabel(Date.now()), 'eyebrow'), text('h1', 'วันนี้ ดูแลกันให้อุ่นใจ')), el('div', { class: 'account-actions' }, button('รีเฟรช', event => task(() => loadPatients(state.patient.id), event.currentTarget), 'secondary compact'), button('ออกจากระบบ', logout, 'secondary compact'))), ...[serviceNotice()].filter(Boolean),
-    el('div', { class: 'patient-bar' }, el('label', {}, 'พื้นที่ดูแลของ', selector), !state.patients.some(p => p.role === 'owner') ? button('สร้างพื้นที่ของฉัน', () => openDialog('สร้างพื้นที่ดูแลของฉัน', profileForm()), 'secondary compact') : null, button('รับรหัสเชิญ', () => openDialog('รับคำเชิญผู้ดูแล', acceptInviteForm()), 'secondary compact')), nav, panel);
+    el('div', { class: 'patient-bar' }, el('label', {}, 'พื้นที่ดูแลของ', selector), !state.patients.some(p => p.role === 'owner') ? button('สร้างพื้นที่ของฉัน', () => openDialog('สร้างพื้นที่ดูแลของฉัน', profileForm()), 'secondary compact') : null, sharingEnabled() ? button('รับรหัสเชิญ', () => openDialog('รับคำเชิญผู้ดูแล', acceptInviteForm()), 'secondary compact') : null), nav, panel);
 }
 function todayPanel() {
   const panel = el('section', { 'aria-labelledby': 'today-title' });
@@ -264,7 +267,7 @@ function familyPanel(owner) {
 function settingsPanel(owner) {
   const panel = el('section', { 'aria-labelledby': 'settings-title' }, text('h2', 'ตั้งค่าพื้นที่ดูแล'));
   panel.querySelector('h2').id = 'settings-title';
-  panel.append(card('สถานะการแจ้งเตือน', [text('p', state.session.features?.deliveryEnabled ? 'ระบบเปิดส่งเตือนแล้ว การส่งขึ้นกับสิทธิ์ LINE ของผู้รับและสถานะตารางยา' : 'ยังไม่เปิดส่งแจ้งเตือนผ่าน LINE'), text('p', 'เพิ่มบัญชีทางการน้องอุ่นเป็นเพื่อนและไม่บล็อกบัญชี เพื่อให้ LINE รับการแจ้งเตือนได้เมื่อเปิดบริการ', 'small'), text('p', 'เมื่อยังไม่มีการตอบรับ ผู้ดูแลอาจได้รับข้อความให้ตรวจสอบตามที่ตั้งไว้ การไม่ตอบไม่ใช่การวินิจฉัยเหตุฉุกเฉิน', 'small')]));
+  panel.append(card('สถานะการแจ้งเตือน', [text('p', state.session.features?.deliveryEnabled ? 'ระบบเปิดส่งเตือนแล้ว การส่งขึ้นกับสิทธิ์ LINE ของผู้รับและสถานะตารางยา' : 'ยังไม่เปิดส่งแจ้งเตือนผ่าน LINE'), text('p', 'เพิ่มบัญชีทางการน้องอุ่นเป็นเพื่อนและไม่บล็อกบัญชี เพื่อให้ LINE รับการแจ้งเตือนได้เมื่อเปิดบริการ', 'small'), sharingEnabled() ? text('p', 'เมื่อยังไม่มีการตอบรับ ผู้ดูแลอาจได้รับข้อความให้ตรวจสอบตามที่ตั้งไว้ การไม่ตอบไม่ใช่การวินิจฉัยเหตุฉุกเฉิน', 'small') : text('p', 'ใช้งานแบบดูแลตัวเองด้วยบัญชี LINE ของคุณ บันทึกสถานะได้ด้วยตัวเอง', 'small')]));
   if (owner) panel.append(card('ข้อมูลและความยินยอม', [text('p', `พื้นที่ดูแล: ${state.patient.displayName}`), state.patient.consentedAt ? text('p', `ให้ความยินยอมเมื่อ ${dateLabel(state.patient.consentedAt)}`, 'small') : null, el('div', { class: 'actions' }, button('ดาวน์โหลดข้อมูลของฉัน', event => task(async () => {
     const data = await api(selectedPath('/export'));
     const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));

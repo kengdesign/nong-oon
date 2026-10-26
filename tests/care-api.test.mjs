@@ -32,11 +32,11 @@ function fixture() {
   for (const actor of [owner, caregiver, outsider]) sql.prepare('INSERT INTO accounts(actor_id,line_user_id,blocked_at,created_at) VALUES(?,?,NULL,?)').run(actor, actor, now);
   return { sql, db, close() { sql.close(); }, beforeBatch(callback) { beforeBatch = callback; } };
 }
-const call = async (f, path, { actor = owner, method = 'GET', data, at = now } = {}) => {
+const call = async (f, path, { actor = owner, method = 'GET', data, at = now, selfCareOnly = false } = {}) => {
   const request = new Request(`https://example.test/api${path}`, { method,
     headers: data === undefined ? {} : { 'content-type': 'application/json' },
     ...(data === undefined ? {} : { body: JSON.stringify(data) }) });
-  const response = await handleCareApi(request, { DB: f.db }, { actorId: actor, now: at });
+  const response = await handleCareApi(request, { DB: f.db, SELF_CARE_ONLY: selfCareOnly ? 'true' : 'false' }, { actorId: actor, now: at });
   return { status: response.status, data: await response.json(), wake: response.headers.get('x-nongoon-wake-patient') };
 };
 async function create(f) {
@@ -238,5 +238,21 @@ test('unknown JSON fields, oversized and malformed bodies return fixed errors wi
       assert.equal(response.status, status);
     }
     assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM medication_schedules').get().n, 0);
+  } finally { f.close(); }
+});
+
+// Synthetic actors in isolated SQLite; no LINE account or network required.
+test('self-care pilot preserves owner access and rejects invitations and existing caregiver access', async () => {
+  const f = fixture(); try {
+    const patientId = await create(f);
+    await invite(f, patientId); dose(f, patientId);
+    const options = { selfCareOnly: true };
+    assert.equal((await call(f, `/patients/${patientId}`, options)).status, 200);
+    assert.equal((await call(f, `/patients/${patientId}/doses/dose1/report`, { ...options, method:'POST', data:{ type:'report_taken', commandId:'self_report', scheduleVersion:1 } })).status, 200);
+    assert.equal((await call(f, `/patients/${patientId}/invites`, { ...options, method:'POST', data:{consent:true} })).status, 403);
+    assert.equal((await call(f, '/invites/accept', { ...options, actor:outsider, method:'POST', data:{code:'a'.repeat(64)} })).status, 403);
+    assert.equal((await call(f, `/patients/${patientId}`, { ...options, actor:caregiver })).status, 404);
+    assert.deepEqual((await call(f, '/patients', { ...options, actor:caregiver })).data.patients, []);
+    assert.equal((await call(f, '/patients', options)).data.patients.length, 1);
   } finally { f.close(); }
 });
