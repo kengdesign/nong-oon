@@ -46,7 +46,7 @@ Scheduling remains enabled; real/synthetic webhook ingestion remains disabled.
 Both synthetic schedules end on 2026-10-26 and do not recur after that date.
 Owner-entered schedules are preserved.
 
-Current local verification: npm run check and all 115 tests pass, including D1
+Current local verification: npm run check and all 117 tests pass, including D1
 trigger-inclusive lease claims, isolated SQLite restore and maximum-pilot load.
 These local results do not establish remote D1 restore success or Cloudflare CPU
 limits at maximum pilot load.
@@ -57,14 +57,30 @@ was sent during these checks.
 
 ## Remaining release gates
 
-- Test caregiver invitation acceptance, visibility, reporting and revocation with
-  a separately selected and authorized LINE account. No caregiver is currently
-  linked. Do not invent a recipient or grant access to the owner's data.
+- The owner-only pilot uses the existing owner's LINE account and does not
+  require another account. Real caregiver acceptance/visibility/reporting and
+  revocation remain a gate only for a future caregiver release. No caregiver
+  is currently linked; do not invent a recipient or grant access to owner data.
 - Measure actual Cloudflare request/CPU budgets at pilot load. Keep local load
   evidence separate from platform measurements.
 - Review recipients and duration before continuous delivery; the successful
   one-off test does not mean ongoing reminders are enabled.
 - Keep public production access disabled until the remaining gates are reviewed.
+
+## Owner and future business administrators
+
+The existing owner's account is sufficient for self-care. A business partner
+invited to administer the service is a different role from a patient caregiver.
+Current application authorization implements patient ownership and caregiver
+grants; it does not yet implement platform administrator invitations.
+
+Future scope: an explicitly configured service owner can issue expiring,
+single-use invitations, review/revoke administrators and inspect an audit of
+administrative changes. Acceptance must use the invitee's own verified LINE
+login. No login bypass or additional owner test account is required. A platform
+administrator grant must not itself grant access to medication/profile records,
+LINE credentials, or permission to change the service owner's identity. Granting
+the first real partner requires selection and confirmation of that recipient.
 
 ## Isolated remote D1 Time Travel drill — 26 October 2026
 
