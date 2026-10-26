@@ -233,3 +233,32 @@ test('LINE push redirects are terminal and never forwarded to another origin', a
   assert.equal(calls, 1);
   assert.deepEqual(result, { accepted: false, retryable: false, code: 'REJECTED' });
 });
+
+
+test('lease ownership ignores D1 trigger-inclusive change counts', async () => {
+  const f = await fixture();
+  try {
+    const db = { prepare(query) {
+      const statement = f.db.prepare(query);
+      if (!query.includes("attempts=attempts+1")) return statement;
+      return { bind(...args) {
+        const bound = statement.bind(...args);
+        return { ...bound, async all() {
+          const result = await bound.all();
+          return { ...result, meta: { ...result.meta, changes: result.results.length ? 3 : 0 } };
+        }, async run() {
+          const result = await bound.run();
+          return { ...result, meta: { ...result.meta, changes: result.meta.changes ? 3 : 0 } };
+        } };
+      } };
+    } };
+    let calls = 0;
+    const result = await deliverPatientOutbox(db, 'p1', at('08:00'), env, {
+      clock: () => at('08:00'), fetcher: async () => { calls++; return new Response('{}'); },
+    });
+    assert.equal(calls, 1);
+    assert.equal(result.sent, 1);
+    assert.equal(ownerJob(f).status, 'sent');
+    assert.equal(ownerJob(f).attempts, 1);
+  } finally { f.close(); }
+});

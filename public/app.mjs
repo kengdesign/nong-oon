@@ -142,7 +142,7 @@ function acceptInviteForm() {
   } }, text('p', 'ใช้รหัสจากเจ้าของข้อมูลโดยตรง คุณจะดูตารางยาและบันทึกการตอบรับได้ตามสิทธิ์ที่ได้รับ', 'small'), el('label', {}, 'รหัสเชิญ', code), submit);
 }
 function renderOnboarding() {
-  view.replaceChildren(el('section', { class: 'welcome' }, el('div', {}, text('p', 'ยินดีต้อนรับสู่น้องอุ่น', 'eyebrow'), text('h1', 'เริ่มดูแลกันได้จากตรงนี้')), button('ออกจากระบบ', logout, 'secondary compact')), serviceNotice(),
+  view.replaceChildren(el('section', { class: 'welcome' }, el('div', {}, text('p', 'ยินดีต้อนรับสู่น้องอุ่น', 'eyebrow'), text('h1', 'เริ่มดูแลกันได้จากตรงนี้')), button('ออกจากระบบ', logout, 'secondary compact')), ...[serviceNotice()].filter(Boolean),
     card('สร้างพื้นที่ดูแลของฉัน', [profileForm()]), card('ได้รับคำเชิญจากคนในครอบครัว?', [acceptInviteForm()]));
 }
 function selectedPath(suffix = '') { return `/api/patients/${encodeURIComponent(state.patient.id)}${suffix}`; }
@@ -152,7 +152,7 @@ function renderDashboard() {
   const selector = el('select', { 'aria-label': 'เลือกพื้นที่ดูแล', onchange: event => task(() => loadPatient(event.target.value), event.target) }, ...state.patients.map(p => el('option', { value: p.id, selected: p.id === state.patient.id ? 'selected' : null }, `${p.displayName}${p.role === 'owner' ? ' · ฉัน' : ' · ผู้ดูแล'}`)));
   const nav = el('nav', { class: 'tabs', 'aria-label': 'พื้นที่ดูแล' }, ...[['today', 'รอบยา'], ['meds', 'ตารางยา'], ['family', 'ผู้ดูแล'], ['settings', 'ตั้งค่า']].map(([id, label]) => button(label, () => showTab(id), '', { 'aria-current': state.tab === id ? 'page' : null })));
   const panel = state.tab === 'today' ? todayPanel() : state.tab === 'meds' ? schedulesPanel(owner) : state.tab === 'family' ? familyPanel(owner) : settingsPanel(owner);
-  view.replaceChildren(el('section', { class: 'welcome' }, el('div', {}, text('p', dateLabel(Date.now()), 'eyebrow'), text('h1', 'วันนี้ ดูแลกันให้อุ่นใจ')), el('div', { class: 'account-actions' }, button('รีเฟรช', event => task(() => loadPatients(state.patient.id), event.currentTarget), 'secondary compact'), button('ออกจากระบบ', logout, 'secondary compact'))), serviceNotice(),
+  view.replaceChildren(el('section', { class: 'welcome' }, el('div', {}, text('p', dateLabel(Date.now()), 'eyebrow'), text('h1', 'วันนี้ ดูแลกันให้อุ่นใจ')), el('div', { class: 'account-actions' }, button('รีเฟรช', event => task(() => loadPatients(state.patient.id), event.currentTarget), 'secondary compact'), button('ออกจากระบบ', logout, 'secondary compact'))), ...[serviceNotice()].filter(Boolean),
     el('div', { class: 'patient-bar' }, el('label', {}, 'พื้นที่ดูแลของ', selector), !state.patients.some(p => p.role === 'owner') ? button('สร้างพื้นที่ของฉัน', () => openDialog('สร้างพื้นที่ดูแลของฉัน', profileForm()), 'secondary compact') : null, button('รับรหัสเชิญ', () => openDialog('รับคำเชิญผู้ดูแล', acceptInviteForm()), 'secondary compact')), nav, panel);
 }
 function todayPanel() {
@@ -297,7 +297,7 @@ async function start() {
     state.session = await api('/api/session'); updateBadge();
     if (!state.session.authenticated) renderLogin();
     else if (!state.session.features?.careEnabled) {
-      view.replaceChildren(text('h1', 'ยินดีต้อนรับสู่น้องอุ่น'), serviceNotice(), button('ออกจากระบบ', logout, 'secondary'));
+      view.replaceChildren(text('h1', 'ยินดีต้อนรับสู่น้องอุ่น'), ...[serviceNotice()].filter(Boolean), button('ออกจากระบบ', logout, 'secondary'));
     } else {
       const requested = new URL(location.href).searchParams.get('patient');
       await loadPatients(requested && /^[a-zA-Z0-9_-]{1,128}$/.test(requested) ? requested : undefined);

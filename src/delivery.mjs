@@ -99,8 +99,8 @@ export async function deliverPatientOutbox(db, patientId, now, env, { fetcher = 
         first_attempt_at=COALESCE(first_attempt_at,?),attempted_at=?,recipient_line_id=?,payload_hash=?
         WHERE id=? AND patient_id=? AND attempts<? AND expires_at>?
         AND ((status='pending' AND available_at<=?) OR (status='sending' AND lease_until<=?))
-        AND ${eligible}`).bind(lease, attemptNow + LEASE_MS, attemptNow, attemptNow, job.line_user_id, hash, job.id, patientId,
-        MAX_ATTEMPTS, attemptNow, attemptNow, attemptNow, attemptNow).run());
+        AND ${eligible} RETURNING id`).bind(lease, attemptNow + LEASE_MS, attemptNow, attemptNow, job.line_user_id, hash, job.id, patientId,
+        MAX_ATTEMPTS, attemptNow, attemptNow, attemptNow, attemptNow).all());
     } catch (error) {
       if (String(error?.message).includes('DELIVERY_QUOTA')) {
         ok(await db.prepare(`UPDATE notification_outbox SET status='dead',last_code='QUOTA',lease_until=NULL,lease_token=NULL
@@ -109,7 +109,8 @@ export async function deliverPatientOutbox(db, patientId, now, env, { fetcher = 
       }
       throw Error('OUTBOX_CLAIM_FAILED');
     }
-    if (claim.meta?.changes !== 1) continue;
+    // D1 meta.changes includes budget-trigger writes; only RETURNING proves lease ownership.
+    if (!Array.isArray(claim.results) || claim.results.length !== 1 || claim.results[0].id !== job.id) continue;
     // Avoid a stale read from a replica: all app DB operations use primary binding.
     const current = await db.prepare(`SELECT id FROM notification_outbox WHERE id=? AND status='sending' AND lease_token=?
       AND expires_at>? AND ${eligible}`).bind(job.id, lease, Math.max(attemptNow, clock()), Math.max(attemptNow, clock())).first();
