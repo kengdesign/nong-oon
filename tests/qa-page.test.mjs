@@ -6,7 +6,9 @@ import { handleRequest } from '../src/webhook.mjs';
 
 test('D1 QA button signs fixed fixtures, clears secret, guards real data and does not claim SQL proof', async () => {
   const html=readFileSync(new URL('../public/staging-qa.html',import.meta.url),'utf8');
-  const script=html.split('<script type="module">')[1].split('</script>')[0];
+  assert.ok(html.includes('src="/staging-qa.mjs"'));
+  assert.ok(!html.includes('<style>') && !html.includes('<script type="module">'));
+  const script=readFileSync(new URL('../public/staging-qa.mjs',import.meta.url),'utf8');
   const secret='test-only-ui-secret', nodes={};
   for(const id of ['result','channelSecret','basic','burst','recovery','paced','signed','inbox']) nodes['#'+id]={value:'',textContent:'',disabled:false};
   nodes['#channelSecret'].value=secret;
