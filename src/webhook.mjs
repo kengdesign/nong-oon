@@ -56,7 +56,7 @@ async function route(request, env = {}, context = {}) {
   const path = new URL(request.url).pathname;
   if (path === '/health' && request.method === 'GET') return json(200, { status: 'staging', deliveryEnabled: env.DELIVERY_ENABLED === 'true' });
   if (path === '/api/session' && request.method === 'GET') {
-    const features = { careEnabled: env.CARE_API_ENABLED === 'true', schedulerEnabled: env.SCHEDULER_ENABLED === 'true',
+    const features = { sharingEnabled: env.SELF_CARE_ONLY !== 'true', careEnabled: env.CARE_API_ENABLED === 'true', schedulerEnabled: env.SCHEDULER_ENABLED === 'true',
       deliveryEnabled: env.DELIVERY_ENABLED === 'true',
       loginConfigured: /^\d{5,20}$/.test(env.LINE_LOGIN_CHANNEL_ID ?? '') && Boolean(env.LINE_LOGIN_CHANNEL_SECRET?.trim()) };
     let identity = null;
