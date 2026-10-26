@@ -46,7 +46,7 @@ Scheduling remains enabled; real/synthetic webhook ingestion remains disabled.
 Both synthetic schedules end on 2026-10-26 and do not recur after that date.
 Owner-entered schedules are preserved.
 
-Current local verification: npm run check and all 125 tests pass, including
+Current local verification: npm run check and all 129 tests pass, including
 service-administrator authorization, D1 trigger-inclusive lease claims, isolated
 SQLite restore and maximum-pilot load. Remote restore and platform load evidence
 are recorded separately below and in docs/platform-load-verification.md.
@@ -88,15 +88,32 @@ SERVICE_OWNER_ACTOR_ID and SERVICE_ADMIN_ENABLED are maintained through encrypte
 runtime configuration so repository deployments preserve activation. Neither is a
 LINE credential. Outbound delivery and recipient selection remain independent.
 
-## Next release decision: bounded owner-only delivery
+## Approved bounded owner-only pilot — 26 October 2026
 
-The next live step is a time-bounded pilot for the existing owner's verified
-account. Before enabling, explicitly confirm the recipient, start/end window and
-use of the owner's current saved schedules. Do not infer these from a successful
-one-off synthetic reminder or from permission to deploy administrator features.
-Prepare an enforceable stop before starting; a future manual check alone is not
-an automatic stop. Keep public production, caregiver release and other recipients
-disabled. No continuous delivery has been enabled by this readiness review.
+The owner explicitly approved the existing verified owner account and saved
+schedules for 27 October 2026 09:00 through 28 October 2026 09:00 Asia/Bangkok.
+Runtime configuration was saved and reloaded to verify both timestamps and the
+single-recipient allowlist. The health endpoint reported delivery disabled before
+the start, as expected. No account identifier is recorded here. PR #25 enforces
+an exclusive stop and a maximum 24-hour window; this is scheduled authorization,
+not evidence that the upcoming messages have been received.
+
+Pending: inspect reminder attempts, deduplication and report persistence during
+the approved window; obtain the owner's actual receipt feedback; verify effective
+delivery is closed after the deadline. Do not auto-extend or add recipients.
+Preserve these runtime settings during any deployment: repository defaults still
+disable delivery and clear the allowlist. This UI/status change should not be
+deployed over the approved pilot without reconciling the runtime configuration.
+
+Before production: review pilot results, production configuration and recovery
+procedure. Caregiver and real partner acceptance tests apply when those features
+are released; they do not require the owner to create another LINE account.
+Public production and additional recipients remain disabled.
+
+The administration status now distinguishes disabled, scheduled, active, expired
+and invalid windows, with start/stop timestamps shown in Bangkok time. It exposes
+no allowlist IDs, credentials or medical records. The window status does not
+certify LINE availability or message receipt.
 
 ## Isolated remote D1 Time Travel drill — 26 October 2026
 
