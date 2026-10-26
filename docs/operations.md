@@ -14,7 +14,7 @@ bookmark, trigger history and observed invocation outcomes separately.
 | `CARE_API_ENABLED` | `true` | Requires successful LINE Login integration |
 | `INGESTION_ENABLED` | `false` | Enable only for the tested LINE channel |
 | `SYNTHETIC_INGESTION_ENABLED` | `false` | Remains `false` |
-| `SCHEDULER_ENABLED` | `false` | Enable after actual object/alarm verification |
+| `SCHEDULER_ENABLED` | `true` | Prepares rounds; outbound sending stays independently disabled |
 | `DELIVERY_ENABLED` | `false` | Enable only for the reviewed pilot recipients |
 | `LIVE_LINE_RECIPIENTS` | `[]` | Explicit 1–10 same-Provider LINE IDs |
 | `RETENTION_ENABLED` | `true` | Keep enabled |
@@ -177,8 +177,8 @@ Primary operational references:
 ## Observed staging evidence — 26 October 2026
 
 Before schema changes, the named staging database contained only `webhook_inbox`
-with zero rows. The dashboard returned recovery bookmark
-`00000014-00000000-00005110-0ff62403536be007f2a4df76bed06b13`.
+with zero rows. A pre-change recovery bookmark was recorded separately in the deployment
+operator context; recovery bookmarks are not included in this repository.
 Migrations0003–0007 were executed in that database after confirming0001/0002
 were present; schema enumeration then showed all20 application tables.
 The Wrangler-compatible migration ledger is recorded separately from application
@@ -189,7 +189,23 @@ Cloudflare Observability showed the existing hourly retention trigger
 08:19GMT+7 on Worker version`7ad4db84`. That verifies the prior inbox-retention
 invocation, not the new private-retention implementation or patient alarms.
 
-The separate Nong Oon Provider currently has only its Messaging API channel.
-A Login-channel creation form was prepared; creation, agreement acceptance and
-credential entry remain with the account owner. No live Login, patient alarm,
-LINE push or remote restore is claimed as verified by the local suite.
+Later verified on 26 October 2026:
+
+- PR12 deployed the supplied branding and persisted the Login channel ID. The
+  Login channel exists under the same Nong Oon Provider, its callback is saved,
+  and its secret is stored in Cloudflare encrypted secrets.
+- PR13 fixed Workers-incompatible `redirect:error` on server-side LINE calls.
+  `redirect:manual` rejects non-success responses without forwarding credentials.
+  A real browser Login completed and the authenticated dashboard opened.
+- The owner created a consented profile and entered test schedules. Reloading
+  retained the profile and schedules.
+- PR14 enabled scheduling with delivery and ingestion still disabled. Following
+  recovery, future rounds appeared in the authenticated dashboard; additional
+  owner-entered test schedules also materialized. This demonstrates the live
+  recovery/alarm/materialization path, not a live LINE push or reminder receipt.
+- Messaging API access-token issuance and live recipient setup are still pending.
+  No live push, caregiver receipt or isolated remote restore is claimed.
+
+All evidence above describes the selected staging deployment, not production.
+No medication labels, account identifiers, provider credentials or health rows
+are recorded in this runbook.
