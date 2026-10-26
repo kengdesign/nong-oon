@@ -87,3 +87,26 @@ It does not establish restoration of actual user data, reconciliation of real
 outbound sends, an SQL export/import drill, or maximum-pilot platform load.
 The isolated database is retained for subsequent checks and is not bound to the
 application. No additional plan or subscription was enabled.
+
+## Isolated D1 volume check — 26 October 2026
+
+Reran the existing maximum-pilot application test locally: 10 profiles, 200
+schedules, eight times/day, 3,200 two-day doses and 6,400 notification intents.
+The mock-only test passed idempotency and the 100/day global plus 20/recipient
+attempt limits; elapsed 1,659 ms and process CPU 1,665 ms for the entire local
+test, not an individual Worker invocation. No real HTTP push was made.
+
+Seeded the same row volumes using SQL in the unbound restore-review D1 database.
+The ten load profiles are synthetic, their 200 schedules are inactive, and no
+Worker, token or live recipient is attached. Existing restore fixtures remain
+separate. Counts were 10/200/3,200/6,400 with zero foreign-key violations.
+The count/integrity query reported 2.43 ms D1 query time (529 ms dashboard response).
+One profile had 160 ready owner intents. A diagnostic due-queue query used the
+notification_due index and a temporary B-tree for the final ordering term.
+These are individual dashboard observations, not latency percentiles or an SLA.
+
+This checks remote storage volume and bounded query behavior only. SQL-created
+fixtures do not establish that the application's scheduler ran at maximum load
+on Workers. The full scheduler/alarm CPU budget at pilot load remains a release
+gate; the 50 ms configured Worker limit must not be compared with whole-suite
+local CPU time. No staging settings were changed and no LINE messages were sent.
