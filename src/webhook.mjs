@@ -1,6 +1,11 @@
 import { projectEvents, persistEvents } from './ingestion.mjs';
 import { handleScheduled } from './maintenance.mjs';
-// Foundation adapter: ingestion only, with outbound delivery disabled.
+import { handleAuth, authenticate, requireCsrf, AuthError } from './auth.mjs';
+import { handleCareApi, CONSENT_VERSION } from './care-api.mjs';
+import { armPatient } from './scheduler.mjs';
+import { processLineEvents } from './line-events.mjs';
+import { secure, boundedRequest } from './http.mjs';
+export { PatientClock } from './patient-clock.mjs';
 export const MAX_WEBHOOK_BYTES = 64 * 1024;
 const json = (status, value) => new Response(JSON.stringify(value), {
   status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
@@ -47,9 +52,49 @@ async function verified(bytes, signature, secret) {
     { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
   return crypto.subtle.verify('HMAC', key, decoded, bytes);
 }
-export async function handleRequest(request, env = {}) {
+async function route(request, env = {}, context = {}) {
   const path = new URL(request.url).pathname;
   if (path === '/health' && request.method === 'GET') return json(200, { status: 'foundation', deliveryEnabled: false });
+  if (path === '/api/session' && request.method === 'GET') {
+    const features = { careEnabled: env.CARE_API_ENABLED === 'true', schedulerEnabled: env.SCHEDULER_ENABLED === 'true',
+      deliveryEnabled: env.DELIVERY_ENABLED === 'true',
+      loginConfigured: /^\d{5,20}$/.test(env.LINE_LOGIN_CHANNEL_ID ?? '') && Boolean(env.LINE_LOGIN_CHANNEL_SECRET?.trim()) };
+    let identity = null;
+    try { identity = await authenticate(request, env); }
+    catch (error) { if (!(error instanceof AuthError) || error.status !== 401) throw error; }
+    return json(200, { authenticated: Boolean(identity), ...(identity ?? {}), features, consentVersion: CONSENT_VERSION });
+  }
+  if (path.startsWith('/auth/')) {
+    if (env.CARE_API_ENABLED !== 'true') return json(503, { error: 'CARE_API_DISABLED' });
+    return (await handleAuth(request, env)) ?? json(404, { error: 'NOT_FOUND' });
+  }
+  if (path.startsWith('/api/')) {
+    if (env.CARE_API_ENABLED !== 'true') return json(503, { error: 'CARE_API_DISABLED' });
+    const identity = await authenticate(request, env);
+    const reading = ['GET','HEAD'].includes(request.method);
+    const bucket = `${identity.actorId}:${Math.floor(Date.now()/60000)}:${reading?'r':'w'}`;
+    const rate = await env.DB.prepare(`INSERT INTO api_rate_limits(bucket,used,expires_at) VALUES(?,1,?)
+      ON CONFLICT(bucket) DO UPDATE SET used=used+1 WHERE used<? RETURNING used`)
+      .bind(bucket,Date.now()+120000,reading?120:30).all();
+    if (rate?.success !== true) return json(503,{error:'SERVICE_UNAVAILABLE'});
+    if (!rate.results?.length) { const r=json(429,{error:'RATE_LIMITED'});r.headers.set('retry-after','60');return r; }
+    if (!['GET', 'HEAD'].includes(request.method)) {
+      requireCsrf(request, env, identity);
+      if (request.method !== 'DELETE' && !/^application\/json(?:\s*;|$)/i.test(request.headers.get('content-type') ?? ''))
+        return json(415, { error: 'JSON_REQUIRED' });
+      request = await boundedRequest(request);
+      if (!request) return json(413, { error: 'PAYLOAD_TOO_LARGE' });
+    }
+    const response = await handleCareApi(request, env, { actorId: identity.actorId, now: Date.now() });
+    const patientId = response.headers.get('x-nongoon-wake-patient');
+    if (response.ok && patientId) {
+      // SQL intent is already committed. Recovery Cron repairs a failed wake;
+      // do not tell the client the accepted write failed and induce duplicates.
+      const wake = armPatient(env, patientId).catch(() => console.warn(JSON.stringify({ task: 'clock_arm', outcome: 'failed' })));
+      if (context.waitUntil) context.waitUntil(wake); else await wake;
+    }
+    return response;
+  }
   if (path !== '/webhook/line') return json(404, { error: 'NOT_FOUND' });
   if (request.method !== 'POST') return new Response(null, { status: 405, headers: { allow: 'POST' } });
   if (typeof env.LINE_CHANNEL_SECRET !== 'string' || !env.LINE_CHANNEL_SECRET.trim()) return json(503, { error: 'NOT_CONFIGURED' });
@@ -66,6 +111,19 @@ export async function handleRequest(request, env = {}) {
   // Explicit opt-in prevents accidental collection before retention/privacy setup.
   if (env.INGESTION_ENABLED !== 'true' && !syntheticFixture(payload, request, env)) return json(503, { error: 'DURABLE_INGESTION_NOT_READY' });
   try { await persistEvents(env.DB, rows); } catch { return json(503, { error: 'DURABLE_INGESTION_UNAVAILABLE' }); }
+  if (env.CARE_API_ENABLED === 'true') {
+    try { await processLineEvents(env.DB, Date.now()); }
+    catch { return json(503, { error: 'INBOX_PROCESSING_UNAVAILABLE' }); }
+  }
   return json(200, { status: 'stored' });
+}
+export async function handleRequest(request, env = {}, context = {}) {
+  try { return secure(await route(request, env, context)); }
+  catch (error) {
+    const known = error instanceof AuthError;
+    const response = json(known ? error.status : 503, { error: known ? error.code : 'SERVICE_UNAVAILABLE' });
+    if (response.status === 429) response.headers.set('retry-after', '60');
+    return secure(response);
+  }
 }
 export default { fetch: handleRequest, scheduled: handleScheduled };

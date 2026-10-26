@@ -31,7 +31,7 @@ test('Worker scheduled entry deletes at most 100 expired rows per event using re
 });
 test('maintenance stays inert outside staging and when opt-in flag is absent or false', async () => {
   const DB={prepare(){assert.fail('must not touch DB');}};
-  for(const env of [{},{...config,APP_ENV:'production'},{...config,RETENTION_ENABLED:'false'},{...config,RETENTION_ENABLED:undefined}])
+  for(const env of [{},{...config,APP_ENV:'unknown'},{...config,RETENTION_ENABLED:'false'},{...config,RETENTION_ENABLED:undefined}])
     assert.deepEqual(await handleScheduled(event,{...env,DB}),{skipped:true});
 });
 test('invalid schedule events are rejected before SQL', async () => {

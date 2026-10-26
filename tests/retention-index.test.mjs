@@ -30,3 +30,4 @@ test('retention selects a bounded batch without sorting tied expiry rows', async
     assert.equal(sqlite.prepare('SELECT event_id FROM webhook_inbox').get().event_id, 'future');
   } finally { sqlite.close(); }
 });
+

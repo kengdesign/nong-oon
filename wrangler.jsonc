@@ -10,14 +10,17 @@
   },
   "triggers": {
     "crons": [
-      "17 * * * *"
+      "17 * * * *",
+      "*/5 * * * *"
     ]
   },
   "assets": {
     "directory": "./public",
     "run_worker_first": [
       "/webhook/*",
-      "/health"
+      "/health",
+      "/auth/*",
+      "/api/*"
     ]
   },
   "d1_databases": [
@@ -33,16 +36,37 @@
     "DELIVERY_ENABLED": "false",
     "INGESTION_ENABLED": "false",
     "SYNTHETIC_INGESTION_ENABLED": "false",
-    "RETENTION_ENABLED": "true"
+    "RETENTION_ENABLED": "true",
+    "APP_ORIGIN": "https://staging.nongoon.com",
+    "CARE_API_ENABLED": "true",
+    "SCHEDULER_ENABLED": "false",
+    "LIVE_LINE_RECIPIENTS": "[]",
+    "PRIVATE_RETENTION_ENABLED": "true"
   },
   "observability": {
     "enabled": true,
     "logs": {
-      "invocation_logs": true,
+      "invocation_logs": false,
       "head_sampling_rate": 1
     },
     "traces": {
       "enabled": false
     }
-  }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PATIENT_CLOCK",
+        "class_name": "PatientClock"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-patient-clock",
+      "new_sqlite_classes": [
+        "PatientClock"
+      ]
+    }
+  ]
 }

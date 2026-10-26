@@ -64,3 +64,4 @@ test('signed webhook persists once in real SQL and expires without retaining mes
     assert.deepEqual(await purgeExpiredInbox(db, row.expires_at), { deleted: 0 });
   } finally { sqlite.close(); }
 });
+
