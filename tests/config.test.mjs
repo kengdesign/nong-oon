@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { deliveryConfig } from '../src/delivery.mjs';
 import { RETENTION_CRON, RECOVERY_CRON } from '../src/maintenance.mjs';
 
 const config = JSON.parse(await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
@@ -16,14 +17,15 @@ test('staging CPU budget is explicit and bounded per invocation', () => {
   assert.equal(config.limits.cpu_ms, 50);
 });
 
-test('collection and delivery stay disabled; scheduler recovery is configured but gated', () => {
+test('staging prepares dose rounds while collection and LINE delivery remain disabled', () => {
   assert.equal(config.vars.INGESTION_ENABLED, 'false');
   assert.equal(config.vars.DELIVERY_ENABLED, 'false');
   assert.equal(config.vars.SYNTHETIC_INGESTION_ENABLED, 'false');
   assert.equal(config.vars.RETENTION_ENABLED, 'true');
   assert.equal(config.vars.APP_ENV, 'staging');
   assert.deepEqual(config.triggers, { crons: [RETENTION_CRON,RECOVERY_CRON] });
-  assert.equal(config.vars.SCHEDULER_ENABLED,'false');
+  assert.equal(config.vars.SCHEDULER_ENABLED,'true');
+  assert.equal(deliveryConfig(config.vars), null);
   assert.equal(config.vars.CARE_API_ENABLED,'true');
   assert.deepEqual(JSON.parse(config.vars.LIVE_LINE_RECIPIENTS),[]);
   assert.equal(config.queues, undefined);

@@ -40,7 +40,7 @@
     "APP_ORIGIN": "https://staging.nongoon.com",
     "LINE_LOGIN_CHANNEL_ID": "2012203704",
     "CARE_API_ENABLED": "true",
-    "SCHEDULER_ENABLED": "false",
+    "SCHEDULER_ENABLED": "true",
     "LIVE_LINE_RECIPIENTS": "[]",
     "PRIVATE_RETENTION_ENABLED": "true"
   },
