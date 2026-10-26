@@ -4,22 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>น้องอุ่น · ตัวอย่างหน้าผู้ดูแล</title>
-  <link rel="stylesheet" href="./app.css">
-  <script type="module" src="./app.mjs"></script>
+  <meta name="theme-color" content="#17695a">
+  <meta name="description" content="น้องอุ่น ช่วยจัดตารางเตือนและบันทึกการตอบรับเรื่องยา เชื่อมคนในครอบครัวด้วยความยินยอม">
+  <title>น้องอุ่น · ดูแลกันในทุกวัน</title>
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/app.mjs"></script>
 </head>
 <body>
   <a class="skip" href="#content">ข้ามไปเนื้อหา</a>
-  <header class="brand"><div class="brand-mark" aria-hidden="true">อุ่น</div><div><strong>น้องอุ่น <span>Nong Oon</span></strong><p>ใส่ใจคนที่คุณรัก ในทุกวัน</p></div><span class="demo-badge">DEMO</span></header>
-  <main id="content">
-    <aside class="notice"><strong>ตัวอย่างหน้าจอเท่านั้น</strong> ใช้ข้อมูลสมมติ ไม่ส่งแจ้งเตือน ไม่บันทึกข้อมูล และไม่ใช่คำแนะนำการใช้ยา</aside>
-    <section class="welcome"><div><p class="eyebrow">พื้นที่สำหรับผู้ดูแล</p><h1>วันนี้ ดูแลกันให้อุ่นใจ</h1><p>ข้อมูลสมมติของคุณแม่ · วันตัวอย่าง</p></div><div class="avatar" aria-hidden="true">ม</div></section>
-    <nav class="tabs" aria-label="ส่วนของหน้าผู้ดูแล"><button type="button" data-tab="today" aria-current="page">วันนี้</button><button type="button" data-tab="meds">รายการยา</button><button type="button" data-tab="caregivers">ผู้ดูแล</button></nav>
-    <section id="today" class="panel" aria-labelledby="today-title"><div class="section-heading"><h2 id="today-title">รอบยาวันนี้</h2><span id="summary"></span></div><p class="muted">สถานะแสดงสิ่งที่ผู้ใช้รายงาน ไม่ใช่หลักฐานว่าทานยาจริง</p><div id="doses"></div></section>
-    <section id="meds" class="panel" hidden aria-labelledby="meds-title"><h2 id="meds-title">รายการยาตัวอย่าง</h2><div class="info-card"><h3>ยาตัวอย่าง A</h3><p>ข้อมูลจำลองสำหรับตรวจรูปแบบหน้าจอเท่านั้น</p></div><div class="info-card"><h3>ยาตัวอย่าง B</h3><p>ระบบจริงต้องตรวจและยืนยันวิธีใช้ตามฉลากก่อนเปิดตารางเตือน</p></div></section>
-    <section id="caregivers" class="panel" hidden aria-labelledby="care-title"><h2 id="care-title">ผู้ดูแลในครอบครัว</h2><div class="info-card"><h3>ผู้ดูแลตัวอย่าง</h3><p>ดูสถานะและรับแจ้งเมื่อยังไม่ได้รับคำตอบ</p><span class="status">ตัวอย่างสิทธิ์ที่เจ้าของข้อมูลยินยอม</span></div><p>ระบบจริงจะเปิดเผยข้อมูลเมื่อได้รับความยินยอม และต้องถอนสิทธิ์ได้ หน้าตัวอย่างนี้ยังไม่มีการจับคู่บัญชี</p></section>
-    <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
-    <footer><button type="button" id="reset" class="secondary">เริ่มตัวอย่างใหม่</button><p>รีเฟรชหน้าจอแล้วข้อมูลตัวอย่างจะเริ่มใหม่<br>ยังไม่เชื่อม LINE หรือระบบเตือนจริง</p></footer>
+  <header class="brand">
+    <a href="/" class="brand-home" aria-label="น้องอุ่น หน้าหลัก"><span class="brand-mark" aria-hidden="true">อุ่น</span><span><strong>น้องอุ่น <small>Nong Oon</small></strong><span class="brand-tagline">ใส่ใจคนที่คุณรัก ในทุกวัน</span></span></a>
+    <span id="service-badge" class="service-badge">กำลังเชื่อมต่อ</span>
+  </header>
+  <main id="content" tabindex="-1">
+    <div id="view" aria-busy="true"><section class="loading-state" role="status"><span class="spinner" aria-hidden="true"></span><h1>สักครู่นะครับ</h1><p>กำลังเปิดพื้นที่ดูแลของคุณ</p></section></div>
+    <noscript><section class="notice"><h1>กรุณาเปิด JavaScript</h1><p>น้องอุ่นต้องใช้ JavaScript เพื่อเข้าใช้บัญชีและแสดงตารางยาของคุณ</p></section></noscript>
   </main>
+  <p id="feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true"></p>
+  <dialog id="app-dialog" aria-labelledby="dialog-title"><div id="dialog-content"></div></dialog>
+  <footer class="site-footer"><p>ช่วยเตือน ช่วยบันทึก ให้ดูแลกันได้ง่ายขึ้น</p><nav aria-label="ข้อมูลบริการ"><a href="/help.html">วิธีใช้งาน</a><a href="/privacy.html">ข้อมูลและความเป็นส่วนตัว</a></nav><p class="small">ใช้ยาตามฉลากหรือคำสั่งของผู้ประกอบวิชาชีพ น้องอุ่นไม่ใช่บริการฉุกเฉิน</p></footer>
 </body>
 </html>
