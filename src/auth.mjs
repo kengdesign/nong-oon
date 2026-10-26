@@ -122,7 +122,7 @@ async function linePost(fetcher, endpoint, fields) {
   try {
     response = await fetcher(`https://api.line.me/oauth2/v2.1/${endpoint}`, {
       method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams(fields).toString(), redirect: 'error', signal: AbortSignal.timeout(8000),
+      body: new URLSearchParams(fields).toString(), redirect: 'manual', signal: AbortSignal.timeout(8000),
     });
   } catch { fail('LOGIN_PROVIDER_UNAVAILABLE', 502); }
   if (!response.ok) {

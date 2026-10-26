@@ -49,6 +49,7 @@ function callback(flow, extra = {}) {
 function provider(flow, override = {}, observed = []) {
   return async (url, options) => {
     observed.push({ url, options });
+    assert.equal(options.redirect, 'manual');
     const fields = new URLSearchParams(options.body);
     if (url.endsWith('/token')) {
       assert.equal(fields.get('client_secret'), secret);
@@ -287,6 +288,28 @@ test('login caps pending OAuth states and rate rows and expires data in bounded 
         await start(f.env);
         assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM auth_rate_limits').get().n, MAX_AUTH_RATE_ROWS - 99);
       }
+    } finally { f.close(); }
+  }
+});
+
+
+test('LINE token and verification redirects are rejected without following or storing a session', async () => {
+  for (const endpoint of ['token', 'verify']) {
+    const f = setup(); try {
+      const flow = await start(f.env), calls = [];
+      const normal = provider(flow);
+      const fetcher = async (url, options) => {
+        calls.push(url);
+        assert.equal(options.redirect, 'manual');
+        if (url.endsWith('/' + endpoint)) return new Response('private provider body', {
+          status: 302, headers: { location: 'https://untrusted.example/collect' },
+        });
+        return normal(url, options);
+      };
+      await assert.rejects(handleAuth(callback(flow), f.env, { now, fetcher }), isCode('LOGIN_REJECTED', 401));
+      assert.equal(calls.length, endpoint === 'token' ? 1 : 2);
+      assert.ok(calls.every(url => url.startsWith('https://api.line.me/oauth2/v2.1/')));
+      assert.equal(f.sql.prepare('SELECT COUNT(*) AS n FROM sessions').get().n, 0);
     } finally { f.close(); }
   }
 });

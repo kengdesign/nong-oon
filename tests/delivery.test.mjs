@@ -39,7 +39,7 @@ test('LINE adapter uses first-attempt retry key, timeout, fixed destination and 
   assert.equal(result.accepted, true);
   assert.equal(seen.url, 'https://api.line.me/v2/bot/message/push');
   assert.equal(seen.options.headers['x-line-retry-key'], key);
-  assert.equal(seen.options.redirect, 'error');
+  assert.equal(seen.options.redirect, 'manual');
   assert.ok(seen.options.signal instanceof AbortSignal);
   assert.deepEqual(JSON.parse(seen.options.body).messages, [{ type: 'text', text: notificationText('reminder', env.APP_ORIGIN) }]);
 });
@@ -216,4 +216,20 @@ test('pause/resume and revoke/reinvite safely rearm future unattempted intents w
     await materializePatient(f.db, 'p1', at('08:31'));
     assert.equal(ownerJob(f).status, 'sent'); assert.equal(ownerJob(f).attempts, 1);
   } finally { f.close(); }
+});
+
+
+test('LINE push redirects are terminal and never forwarded to another origin', async () => {
+  let calls = 0;
+  const result = await sendLineNotification({ to: owner, retryKey: '123e4567-e89b-42d3-a456-426614174000', text: 'test reminder' }, {
+    token: env.LINE_CHANNEL_ACCESS_TOKEN,
+    fetcher: async (url, options) => {
+      calls++;
+      assert.equal(url, 'https://api.line.me/v2/bot/message/push');
+      assert.equal(options.redirect, 'manual');
+      return new Response('private', { status: 307, headers: { location: 'https://untrusted.example/collect' } });
+    },
+  });
+  assert.equal(calls, 1);
+  assert.deepEqual(result, { accepted: false, retryable: false, code: 'REJECTED' });
 });
