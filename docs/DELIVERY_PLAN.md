@@ -16,7 +16,7 @@ Ten active self profiles globally. Each profile:20 active medication schedules,8
 ## Release gates and evidence
 Local SQLite and mock-LINE tests do NOT establish actual Cloudflare/LINE availability. A merged PR and Ready deployment do NOT establish live Login/notification correctness.
 
-1. Apply all seven migrations to staging; preserve a D1 Time Travel bookmark before changes.
+1. Apply all eight migrations to staging; preserve a D1 Time Travel bookmark before changes.
 2. CI + independent QA + deploy exact reviewed commit with collection and delivery disabled.
 3. Check deployed assets, authenticated API rejection paths, actual D1 schema, alarm binding and retained Cron.
 4. Supply LINE Login channel ID/secret under the SAME Provider as Messaging, fixed callback `https://staging.nongoon.com/auth/callback`, then actual browser Login/consent pilot. Secrets only in Cloudflare secure interface, never chat/GitHub.
@@ -46,10 +46,10 @@ Scheduling remains enabled; real/synthetic webhook ingestion remains disabled.
 Both synthetic schedules end on 2026-10-26 and do not recur after that date.
 Owner-entered schedules are preserved.
 
-Current local verification: npm run check and all 117 tests pass, including D1
-trigger-inclusive lease claims, isolated SQLite restore and maximum-pilot load.
-These local results do not establish remote D1 restore success or Cloudflare CPU
-limits at maximum pilot load.
+Current local verification: npm run check and all 125 tests pass, including
+service-administrator authorization, D1 trigger-inclusive lease claims, isolated
+SQLite restore and maximum-pilot load. Remote restore and platform load evidence
+are recorded separately below and in docs/platform-load-verification.md.
 
 Live read-only checks show retention last succeeded at 12:17:20 Bangkok and
 scheduler recovery at 12:25:30, with no recorded recovery failure. No notification
@@ -61,26 +61,42 @@ was sent during these checks.
   require another account. Real caregiver acceptance/visibility/reporting and
   revocation remain a gate only for a future caregiver release. No caregiver
   is currently linked; do not invent a recipient or grant access to owner data.
-- Measure actual Cloudflare request/CPU budgets at pilot load. Keep local load
-  evidence separate from platform measurements.
+- Isolated Cloudflare scheduler/alarm verification completed three cycles of ten
+  profiles. See docs/platform-load-verification.md for counts, CPU sample limits
+  and cleanup. The measured samples are not maxima or production guarantees.
 - Review recipients and duration before continuous delivery; the successful
   one-off test does not mean ongoing reminders are enabled.
 - Keep public production access disabled until the remaining gates are reviewed.
 
-## Owner and future business administrators
+## Owner and business administrators
 
-The existing owner's account is sufficient for self-care. A business partner
-invited to administer the service is a different role from a patient caregiver.
-Current application authorization implements patient ownership and caregiver
-grants; it does not yet implement platform administrator invitations.
+PR #24 is merged and deployed to staging. Migration 0008 was applied before the
+application deployment. The user explicitly authorized activation for their
+verified existing account; the live page displayed the service-owner role and
+loaded operational status, members, pending invitations and audit sections.
+No account identifier or invitation code is recorded in this repository.
 
-Future scope: an explicitly configured service owner can issue expiring,
-single-use invitations, review/revoke administrators and inspect an audit of
-administrative changes. Acceptance must use the invitee's own verified LINE
-login. No login bypass or additional owner test account is required. A platform
-administrator grant must not itself grant access to medication/profile records,
-LINE credentials, or permission to change the service owner's identity. Granting
-the first real partner requires selection and confirmation of that recipient.
+Owner-managed, account-bound, expiring single-use partner invitations and immediate
+revocation are implemented. Partners inspect operational status only; this role
+does not grant patient/caregiver access, credentials, settings changes or permission
+to invite other administrators. No real partner has been invited or granted access.
+Real partner Login/acceptance remains unverified and does not block self-care.
+
+The administration page now explains the owner's own identifier separately from
+the partner's identifier and the invitation code, with explicit four-step guidance.
+SERVICE_OWNER_ACTOR_ID and SERVICE_ADMIN_ENABLED are maintained through encrypted
+runtime configuration so repository deployments preserve activation. Neither is a
+LINE credential. Outbound delivery and recipient selection remain independent.
+
+## Next release decision: bounded owner-only delivery
+
+The next live step is a time-bounded pilot for the existing owner's verified
+account. Before enabling, explicitly confirm the recipient, start/end window and
+use of the owner's current saved schedules. Do not infer these from a successful
+one-off synthetic reminder or from permission to deploy administrator features.
+Prepare an enforceable stop before starting; a future manual check alone is not
+an automatic stop. Keep public production, caregiver release and other recipients
+disabled. No continuous delivery has been enabled by this readiness review.
 
 ## Isolated remote D1 Time Travel drill — 26 October 2026
 
