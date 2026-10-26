@@ -42,7 +42,9 @@ test('malformed signed JSON and invalid events rejected', async () => {
 });
 test('health route does not expose credentials or claim production readiness', async () => {
   const r = await handleRequest(new Request('https://example.test/health'), env);
-  assert.equal(r.status, 200); assert.deepEqual(await r.json(), { status: 'foundation', deliveryEnabled: false });
+  assert.equal(r.status, 200); assert.deepEqual(await r.json(), { status: 'staging', deliveryEnabled: false });
+  const enabled=await handleRequest(new Request('https://example.test/health'),{...env,DELIVERY_ENABLED:'true'});
+  assert.equal((await enabled.json()).deliveryEnabled,true);
 });
 test('wrong paths and methods rejected', async () => {
   assert.equal((await handleRequest(new Request('https://example.test/other'), env)).status, 404);

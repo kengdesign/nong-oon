@@ -54,7 +54,7 @@ async function verified(bytes, signature, secret) {
 }
 async function route(request, env = {}, context = {}) {
   const path = new URL(request.url).pathname;
-  if (path === '/health' && request.method === 'GET') return json(200, { status: 'foundation', deliveryEnabled: false });
+  if (path === '/health' && request.method === 'GET') return json(200, { status: 'staging', deliveryEnabled: env.DELIVERY_ENABLED === 'true' });
   if (path === '/api/session' && request.method === 'GET') {
     const features = { careEnabled: env.CARE_API_ENABLED === 'true', schedulerEnabled: env.SCHEDULER_ENABLED === 'true',
       deliveryEnabled: env.DELIVERY_ENABLED === 'true',
