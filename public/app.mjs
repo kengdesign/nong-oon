@@ -114,7 +114,7 @@ function renderLogin() {
   const login = configured ? el('a', { href: '/auth/login', class: 'button primary' }, 'เข้าใช้ผ่าน LINE') : button('เข้าใช้ผ่าน LINE', () => {}, 'primary', { disabled: true });
   view.replaceChildren(
     el('section', { class: 'hero' }, el('div', {}, text('p', 'พื้นที่เล็ก ๆ สำหรับความใส่ใจ', 'eyebrow'), text('h1', 'เรื่องยาในทุกวัน\nดูแลกันให้อุ่นใจ'), text('p', 'จัดตารางเตือน บันทึกการตอบรับ และชวนคนในครอบครัวมาช่วยดูแล โดยคุณเป็นคนเลือกสิทธิ์การเข้าถึง'), login, configured ? text('p', 'เข้าใช้ด้วยบัญชี LINE ของคุณ ไม่ต้องตั้งรหัสผ่านเพิ่ม', 'hint') : text('p', 'กำลังเตรียมระบบเข้าใช้ เมื่อพร้อมแล้วปุ่มนี้จะเปิดให้ใช้งาน', 'hint')),
-      el('div', { class: 'hero-art', 'aria-hidden': 'true' }, el('div', { class: 'hero-symbol' }, text('span', 'อุ่น'), text('strong', 'ใส่ใจทุกวัน'), text('small', 'เวลาเล็ก ๆ ที่สำคัญ')), text('div', '✓', 'hero-dot'))),
+      el('div', { class: 'hero-art', 'aria-hidden': 'true' }, el('img', { class: 'hero-logo', src: '/logo-nongoon.png', alt: '', width: '290', height: '290' }))),
     serviceNotice(),
     el('section', { class: 'steps', 'aria-label': 'เริ่มใช้น้องอุ่น' }, ...[['01', 'เริ่มจากตัวคุณ', 'เข้าใช้ผ่าน LINE แล้วให้ความยินยอมสำหรับข้อมูลของคุณเอง'], ['02', 'ตั้งตามฉลากยา', 'ใส่ชื่อยา วิธีใช้ และเวลาที่คุณตรวจสอบแล้ว'], ['03', 'ดูแลไปด้วยกัน', 'บันทึกการตอบรับ หรือเชิญผู้ดูแลที่คุณไว้ใจ']].map(([number, title, description]) => el('article', { class: 'step' }, text('span', number, 'number'), text('h3', title), text('p', description)))),
     text('p', 'การตอบรับเป็นสิ่งที่ผู้ใช้รายงาน ไม่ใช่หลักฐานว่าทานยาจริง และการไม่ตอบรับไม่ใช่การวินิจฉัยเหตุฉุกเฉิน', 'muted'));
