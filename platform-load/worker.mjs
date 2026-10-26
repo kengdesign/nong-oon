@@ -13,7 +13,7 @@ export class LoadPatientClock extends PatientClock {
   constructor(ctx, env) { super(ctx, safeEnv(env)); }
   async alarm() {
     const control = await this.env.DB.prepare('SELECT runs,expires_at FROM platform_load_control WHERE id=1').first();
-    if (!control || control.runs > 3 || control.expires_at < Date.now()) {
+    if (!control || control.runs < 1 || control.runs > 3 || control.expires_at <= Date.now()) {
       await this.ctx.storage.deleteAlarm(); return;
     }
     await super.alarm();
@@ -31,7 +31,11 @@ export default {
   async scheduled(controller, env) {
     const guarded = safeEnv(env);
     const claim = await env.DB.prepare(`UPDATE platform_load_control SET runs=runs+1
-      WHERE id=1 AND runs<3 AND expires_at>? RETURNING runs`).bind(Date.now()).all();
+      WHERE id=1 AND runs<3 AND expires_at>?
+        AND (runs=0 OR (SELECT COUNT(*) FROM platform_load_results r
+          WHERE r.cycle=platform_load_control.runs
+          AND r.patient_id IN (SELECT id FROM patients WHERE revoked_at IS NULL))=10)
+      RETURNING runs`).bind(Date.now()).all();
     if (claim.results.length !== 1) return;
     const result = await recoverSchedules(guarded, Date.now());
     console.log(JSON.stringify({ event: 'LOAD_RECOVERY_COMPLETED', cycle: claim.results[0].runs, ...result }));
