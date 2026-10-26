@@ -88,7 +88,7 @@ async function task(fn, control) {
 function empty(title, description, action) { return el('div', { class: 'empty' }, el('div', { class: 'empty-icon', 'aria-hidden': 'true' }, '○'), text('h3', title), text('p', description), action); }
 function closeDialog() { dialog.close(); dialogContent.replaceChildren(); }
 function openDialog(title, content, actions) {
-  dialogContent.replaceChildren(el('div', { class: 'dialog-heading' }, text('h2', title), button('×', closeDialog, 'secondary', { 'aria-label': 'ปิดหน้าต่าง' })), content, actions || null);
+  dialogContent.replaceChildren(el('div', { class: 'dialog-heading' }, text('h2', title), button('×', closeDialog, 'secondary', { 'aria-label': 'ปิดหน้าต่าง' })), content, ...(actions ? [actions] : []));
   dialogContent.querySelector('h2').id = 'dialog-title';
   dialog.showModal();
 }

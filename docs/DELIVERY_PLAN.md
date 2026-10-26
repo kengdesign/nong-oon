@@ -28,3 +28,17 @@ Local SQLite and mock-LINE tests do NOT establish actual Cloudflare/LINE availab
 
 ## Scope intentionally disabled
 OCR, voice recognition, medication identification, dose recommendation, payments, emergency escalation and public production access are not enabled. No inference of dosing instructions; lack of response is not an emergency diagnosis. Only current explicit capabilities may change a dose. No raw messages, reply tokens, credentials or health data in GitHub or application logs.
+
+## Latest staging verification — 26 October 2026
+
+PR12–14 are merged and deployed. Real LINE Login, owner consent/profile,
+schedule persistence and future dose-round materialization were observed in the
+staging browser. Scheduling is enabled; real/synthetic webhook ingestion and
+outbound delivery remain disabled. Four owner-entered test schedules materialized
+without manual database insertion. The local/CI suite passes 114 tests.
+
+Pending release gates: Messaging API access-token creation and encrypted storage,
+reviewed pilot recipient configuration, one actual reminder and authenticated
+report, caregiver workflow with a separately authorized test account, and an
+isolated remote restore drill. Do not infer live receipt from successful local
+HTTP mocks or from the dashboard's dose rounds.
