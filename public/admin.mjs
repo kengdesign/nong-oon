@@ -34,10 +34,11 @@ function confirmAction(title,description,action) {
     button('ยกเลิก',async()=>dialog.close()),button('ยืนยัน',async()=>{dialog.close();await action();}));
   dialog.showModal();
 }
-function inputForm(label,hint,onSubmit,{pattern,minlength,maxlength}={}) {
+function inputForm(label,hint,onSubmit,{pattern,minlength,maxlength,submitLabel='ดำเนินการ',placeholder=''}={}) {
   const form=node('form',null), caption=node('label',label), input=node('input',null,{type:'text',required:'',autocomplete:'off',spellcheck:'false',
     ...(pattern?{pattern}:{}),...(minlength?{minlength}:{}),...(maxlength?{maxlength}:{})});
-  caption.append(input);const submit=node('button','ดำเนินการ',{type:'submit',class:'primary'});
+  input.setAttribute('placeholder',placeholder);
+  caption.append(input);const submit=node('button',submitLabel,{type:'submit',class:'primary'});
   form.append(caption,node('p',hint,{class:'small'}),submit);
   form.addEventListener('submit',event=>{event.preventDefault();task(()=>onSubmit(input.value.trim()));});
   return form;
@@ -45,7 +46,8 @@ function inputForm(label,hint,onSubmit,{pattern,minlength,maxlength}={}) {
 async function render() {
   session=await api('/api/session');
   if(!session.authenticated) {view.replaceChildren(node('p','เข้าใช้ด้วยบัญชี LINE ของคุณก่อน'),node('a','เข้าใช้ผ่าน LINE',{href:'/auth/login',class:'button primary'}));return;}
-  const identity=card('บัญชีของคุณ',node('p','ส่งรหัสบัญชีนี้ให้เจ้าของระบบเมื่อได้รับเชิญเป็นแอดมินร่วม'),node('code',session.actorId));
+  const identityHint=node('p','รหัสนี้ใช้ระบุบัญชีที่คุณเข้าสู่ระบบ ไม่ใช่รหัสผ่านหรือรหัสคำเชิญ');
+  const identity=card('รหัสบัญชีของคุณ',identityHint,node('code',session.actorId));
   view.replaceChildren(identity);
   let admin;
   try {admin=await api('/api/admin/session');} catch(error) {
@@ -53,12 +55,17 @@ async function render() {
     throw error;
   }
   view.append(node('p',`สิทธิ์ของคุณ: ${{owner:'เจ้าของระบบ',admin:'แอดมินร่วม',none:'ยังไม่มีสิทธิ์แอดมิน'}[admin.role]}`));
+  identityHint.textContent=admin.role==='owner'
+    ? 'คุณเป็นเจ้าของระบบแล้ว ไม่ต้องนำรหัสของคุณไปกรอกด้านล่าง หากยังไม่เชิญหุ้นส่วน สามารถปล่อยช่องด้านล่างว่างไว้ได้'
+    : admin.role==='none'
+      ? 'ขั้นตอนที่ 1: คัดลอกรหัสบัญชีของคุณด้านล่าง ส่งให้เจ้าของระบบเพื่อสร้างคำเชิญ รหัสนี้ไม่ใช่รหัสผ่านหรือรหัสคำเชิญ'
+      : 'รหัสนี้ใช้ระบุบัญชีแอดมินร่วมของคุณ ไม่ใช่รหัสผ่านหรือรหัสคำเชิญ';
   if(admin.role==='none') {
-    view.append(card('รับคำเชิญแอดมินร่วม',inputForm('รหัสเชิญ','รหัสใช้ได้เฉพาะบัญชีที่เจ้าของระบุ และหมดอายุใน 24 ชั่วโมง',async code=>{
+    view.append(card('ขั้นตอนที่ 2: รับสิทธิ์แอดมินร่วม',inputForm('รหัสคำเชิญที่ได้รับจากเจ้าของระบบ','เมื่อเจ้าของสร้างคำเชิญแล้ว ให้นำรหัสคำเชิญที่เขาส่งกลับมาใส่ช่องนี้ ไม่ใช่รหัสบัญชีที่ขึ้นต้นด้วย U คำเชิญใช้ได้ครั้งเดียว เฉพาะบัญชีของคุณ และหมดอายุใน 24 ชั่วโมง',async code=>{
       confirmAction('รับสิทธิ์แอดมินร่วม?','คุณจะเข้าดูสถานะการทำงานของบริการได้ สิทธิ์นี้ไม่รวมข้อมูลยาของผู้ใช้',async()=>{
         await api('/api/admin/invites/accept','POST',{code});await render();feedback.textContent='รับสิทธิ์แอดมินร่วมแล้ว';
       });
-    },{pattern:'[0-9a-f]{64}',minlength:64,maxlength:64})));
+    },{pattern:'[0-9a-f]{64}',minlength:64,maxlength:64,submitLabel:'รับสิทธิ์แอดมินร่วม',placeholder:'วางรหัสคำเชิญจากเจ้าของระบบ'})));
     return;
   }
   const status=await api('/api/admin/status');
@@ -67,14 +74,20 @@ async function render() {
   for(const item of status.operations) health.append(node('li',`${item.task}: สำเร็จล่าสุด ${time(item.lastOkAt)}`));
   view.append(card('สถานะบริการ',health),button('รีเฟรช',render));
   if(admin.role!=='owner') return;
-  view.append(card('เชิญหุ้นส่วนเป็นแอดมินร่วม',node('p','ให้หุ้นส่วนเข้าใช้ผ่าน LINE แล้วเปิดหน้านี้เพื่อส่งรหัสบัญชีมาให้คุณ ตรวจสอบว่าเป็นคนที่ต้องการก่อนสร้างคำเชิญ'),
-    inputForm('รหัสบัญชีหุ้นส่วน','แอดมินร่วมดูสถานะระบบได้ แต่เชิญเพิ่มหรือถอนสิทธิ์คนอื่นไม่ได้ รองรับสูงสุด 5 คน',async targetActorId=>{
+  const steps=node('ol',null);
+  steps.append(node('li','ส่งลิงก์หน้านี้ให้หุ้นส่วน: https://staging.nongoon.com/admin.html'),
+    node('li','ให้หุ้นส่วนเข้าสู่ระบบด้วย LINE ของเขา แล้วคัดลอก “รหัสบัญชีของคุณ” ส่งมาให้คุณ'),
+    node('li','วางรหัสที่หุ้นส่วนส่งมาในช่องด้านล่าง แล้วกด “สร้างคำเชิญให้หุ้นส่วน”'),
+    node('li','คัดลอกรหัสคำเชิญที่ระบบแสดง ส่งกลับให้หุ้นส่วนใช้รับสิทธิ์ในหน้านี้ ภายใน 24 ชั่วโมง'));
+  view.append(card('เชิญหุ้นส่วนเป็นแอดมินร่วม',steps,
+    node('p','แอดมินร่วมดูสถานะระบบได้ แต่เชิญเพิ่มหรือถอนสิทธิ์คนอื่นไม่ได้ และไม่ได้สิทธิ์ดูข้อมูลยาของผู้ใช้ รองรับสูงสุด 5 คน'),
+    inputForm('วางรหัสบัญชีที่หุ้นส่วนส่งมา','ใช้รหัสบัญชีของหุ้นส่วนที่ขึ้นต้นด้วย U ตามด้วยตัวเลขและตัวอักษร 32 ตัว ไม่ใช่ LINE ID ชื่อใน LINE หรือรหัสบัญชีของคุณด้านบน',async targetActorId=>{
       confirmAction('สร้างคำเชิญแอดมินร่วม?',`บัญชีเป้าหมาย: ${targetActorId}`,async()=>{
         const invitation=await api('/api/admin/invites','POST',{targetActorId});await render();
         dialogContent.replaceChildren(node('h2','รหัสเชิญแอดมินร่วม',{id:'admin-dialog-title'}),node('p',`ส่งให้บัญชี ${invitation.targetActorId} เท่านั้น หมดอายุ ${time(invitation.expiresAt)}`),
-          node('code',invitation.code),node('p','รหัสแสดงครั้งเดียว กรุณาคัดลอกก่อนปิด'),button('ปิด',async()=>{dialogContent.replaceChildren();dialog.close();}));dialog.showModal();
+          node('code',invitation.code),node('p','คัดลอกรหัสคำเชิญนี้ส่งกลับให้หุ้นส่วน นำไปกรอกช่อง “รหัสคำเชิญที่ได้รับจากเจ้าของระบบ” ในหน้านี้ รหัสแสดงครั้งเดียว กรุณาคัดลอกก่อนปิด'),button('ปิด',async()=>{dialogContent.replaceChildren();dialog.close();}));dialog.showModal();
       });
-    },{pattern:'U[0-9a-f]{32}',minlength:33,maxlength:33})));
+    },{pattern:'U[0-9a-f]{32}',minlength:33,maxlength:33,submitLabel:'สร้างคำเชิญให้หุ้นส่วน',placeholder:'วางรหัสบัญชีของหุ้นส่วนที่ขึ้นต้นด้วย U'})));
   const data=await api('/api/admin/members'),members=node('div',null);
   if(!data.members.length) members.append(node('p','ยังไม่มีแอดมินร่วม'));
   for(const member of data.members) {
