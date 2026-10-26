@@ -23,6 +23,28 @@ async function call(f,path,method='GET',body,actorId=owner,at=now,override={}) {
 async function invite(f,targetActorId=partner) {
   const result=await call(f,'/invites','POST',{targetActorId});assert.equal(result.status,201,JSON.stringify(result));return result.data.code;
 }
+test('admin distinguishes waiting, active and expired pilot without exposing recipient configuration',async()=>{
+  const f=setup();
+  const pilot={APP_ENV:'staging',DELIVERY_ENABLED:'true',SCHEDULER_ENABLED:'true',
+    DELIVERY_START_AT:String(now),DELIVERY_STOP_AT:String(now+86400000),
+    LIVE_LINE_RECIPIENTS:JSON.stringify([other]),LINE_CHANNEL_ACCESS_TOKEN:'private-token'};
+  try {
+    for(const [at,state] of [[now-1,'scheduled'],[now,'active'],[now+86399999,'active'],[now+86400000,'expired']]) {
+      const r=await call(f,'/status','GET',undefined,owner,at,pilot);
+      assert.equal(r.status,200);
+      assert.deepEqual(r.data.delivery,{state,startAt:now,stopAt:now+86400000});
+      assert.equal(r.data.deliveryEnabled,state==='active');
+      assert.equal(JSON.stringify(r.data).includes(other),false);
+      assert.equal(JSON.stringify(r.data).includes('private-token'),false);
+    }
+    for(const changes of [{DELIVERY_STOP_AT:''},{DELIVERY_STOP_AT:String(now+86400001)},{DELIVERY_START_AT:' 123'}]) {
+      const r=await call(f,'/status','GET',undefined,owner,now,{...pilot,...changes});
+      assert.deepEqual(r.data.delivery,{state:'invalid',startAt:null,stopAt:null});
+    }
+    const disabled=await call(f,'/status','GET',undefined,owner,now,{...pilot,DELIVERY_ENABLED:'false'});
+    assert.deepEqual(disabled.data.delivery,{state:'disabled',startAt:null,stopAt:null});
+  } finally {f.close();}
+});
 test('service owner is configured explicitly; no first-login bootstrap or client role promotion',async()=>{
   const f=setup();try {
     assert.equal((await call(f,'/session')).data.role,'owner');
