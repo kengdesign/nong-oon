@@ -6,7 +6,7 @@
   "workers_dev": false,
   "preview_urls": false,
   "limits": { "cpu_ms": 50 },
-  "triggers": { "crons": ["* * * * *"] },
+  "triggers": { "crons": [] },
   "vars": { "APP_ENV": "isolated-load-review", "DELIVERY_ENABLED": "false" },
   "d1_databases": [{ "binding": "DB", "database_name": "nong-oon-load-review",
     "database_id": "ac1922cf-38d7-40ce-8dfd-9a01703c5035", "migrations_dir": "../migrations" }],
