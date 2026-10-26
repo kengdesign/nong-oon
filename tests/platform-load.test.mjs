@@ -28,7 +28,17 @@ test('isolated platform drill runs three ten-profile recoveries and real alarm l
     };
     for (let cycle=1; cycle<=3; cycle++) {
       await loadWorker.scheduled({},env);
-      for (const { object, storage } of clocks.values()) { await object.alarm(); assert.equal(await storage.getAlarm(),null); }
+      // Cron may be retried while alarms are still pending. It must not advance
+      // the cycle or relabel the outstanding alarms.
+      await Promise.all([loadWorker.scheduled({},env), loadWorker.scheduled({},env)]);
+      assert.equal(f.sql.prepare('SELECT runs FROM platform_load_control').get().runs,cycle);
+      const pending = [...clocks.values()];
+      for (const { object, storage } of pending.slice(0,9)) { await object.alarm(); assert.equal(await storage.getAlarm(),null); }
+      await loadWorker.scheduled({},env);
+      assert.equal(f.sql.prepare('SELECT runs FROM platform_load_control').get().runs,cycle);
+      await pending[9].object.alarm();
+      assert.equal(await pending[9].storage.getAlarm(),null);
+      assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM platform_load_results WHERE cycle=?').get(cycle).n,10);
     }
     await loadWorker.scheduled({},env);
     assert.equal(f.sql.prepare('SELECT runs FROM platform_load_control').get().runs,3);
