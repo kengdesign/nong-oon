@@ -34,7 +34,7 @@ export async function sendLineNotification({ to, retryKey, text }, { token, fetc
   try {
     response = await fetcher('https://api.line.me/v2/bot/message/push', {
       method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-line-retry-key': retryKey },
-      body: JSON.stringify({ to, messages: [{ type: 'text', text }] }), signal: AbortSignal.timeout(10_000), redirect: 'error',
+      body: JSON.stringify({ to, messages: [{ type: 'text', text }] }), signal: AbortSignal.timeout(10_000), redirect: 'manual',
     });
   } catch { return { accepted: false, retryable: true, code: 'NETWORK' }; }
   // We never retain/log response bodies or private request identifiers.
