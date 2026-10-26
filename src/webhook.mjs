@@ -5,6 +5,7 @@ import { handleCareApi, CONSENT_VERSION } from './care-api.mjs';
 import { armPatient } from './scheduler.mjs';
 import { processLineEvents } from './line-events.mjs';
 import { secure, boundedRequest } from './http.mjs';
+import { handleAdminApi } from './admin-api.mjs';
 export { PatientClock } from './patient-clock.mjs';
 export const MAX_WEBHOOK_BYTES = 64 * 1024;
 const json = (status, value) => new Response(JSON.stringify(value), {
@@ -85,7 +86,8 @@ async function route(request, env = {}, context = {}) {
       request = await boundedRequest(request);
       if (!request) return json(413, { error: 'PAYLOAD_TOO_LARGE' });
     }
-    const response = await handleCareApi(request, env, { actorId: identity.actorId, now: Date.now() });
+    const handler = path.startsWith('/api/admin/') ? handleAdminApi : handleCareApi;
+    const response = await handler(request, env, { actorId: identity.actorId, now: Date.now() });
     const patientId = response.headers.get('x-nongoon-wake-patient');
     if (response.ok && patientId) {
       // SQL intent is already committed. Recovery Cron repairs a failed wake;

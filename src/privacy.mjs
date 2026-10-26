@@ -15,6 +15,9 @@ export async function purgePrivateData(db, now) {
     ['auth_rate_limits', 'rate_hash', 'expires_at<=?', [now]],
     ['api_rate_limits', 'bucket', 'expires_at<=?', [now]],
     ['care_invites', 'code_hash', 'expires_at<=?', [now]],
+    ['service_admin_invites', 'code_hash', 'expires_at<=?', [now]],
+    ['service_admins', 'actor_id', 'revoked_at<=?', [withdrawn]],
+    ['service_admin_audit', 'event_id', 'created_at<=?', [history]],
     ['care_members', 'rowid', "revoked_at<=? AND role='caregiver'", [withdrawn]],
     ['care_grants', 'rowid', `revoked_at<=? AND NOT EXISTS(SELECT 1 FROM care_members m
       WHERE m.patient_id=care_grants.patient_id AND m.actor_id=care_grants.actor_id AND m.revoked_at IS NULL)`, [withdrawn]],
