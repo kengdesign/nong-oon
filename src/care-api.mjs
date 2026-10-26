@@ -239,6 +239,8 @@ export async function handleCareApi(request, env, { actorId, now = Date.now() } 
     if (!id(actorId)) fail(401, 'AUTH_REQUIRED');
     if (!Number.isSafeInteger(now) || now < 0 || !env?.DB?.prepare || !env.DB.batch) throw Error('NOT_READY');
     const db = env.DB, url = new URL(request.url), method = request.method;
+    const selfCareOnly = env.SELF_CARE_ONLY === 'true';
+    if (selfCareOnly && method === 'POST' && (url.pathname === '/api/invites/accept' || /^\/api\/patients\/[^/]+\/invites$/.test(url.pathname))) fail(403, 'SHARING_DISABLED');
     const active = await rows(db, 'SELECT actor_id FROM accounts WHERE actor_id=? AND blocked_at IS NULL', [actorId]);
     if (active.length !== 1) fail(401, 'AUTH_REQUIRED');
     if (url.pathname === '/api/patients') {
@@ -246,13 +248,14 @@ export async function handleCareApi(request, env, { actorId, now = Date.now() } 
       if (method === 'GET') return json(200, { patients: (await rows(db,
         `SELECT p.*,m.role,s.current_version FROM patients p JOIN care_members m ON m.patient_id=p.id
         JOIN accounts a ON a.actor_id=m.actor_id JOIN care_schedules s ON s.patient_id=p.id WHERE m.actor_id=? AND m.revoked_at IS NULL
-        AND p.revoked_at IS NULL AND a.blocked_at IS NULL ORDER BY p.created_at,p.id LIMIT 11`, [actorId])).map(patientValue) });
+        AND (?=0 OR (m.role='owner' AND p.owner_actor_id=m.actor_id)) AND p.revoked_at IS NULL AND a.blocked_at IS NULL ORDER BY p.created_at,p.id LIMIT 11`, [actorId, selfCareOnly ? 1 : 0])).map(patientValue) });
       fail(405, 'METHOD_NOT_ALLOWED');
     }
     if (url.pathname === '/api/invites/accept' && method === 'POST') return await acceptInvite(request, db, actorId, now);
     const match = /^\/api\/patients\/([A-Za-z0-9_-]{1,128})(?:\/(.*))?$/.exec(url.pathname);
     if (!match) fail(404, 'NOT_FOUND');
     const [, patientId, tail = ''] = match;
+    if (selfCareOnly) await access(db, patientId, actorId, true);
     if (tail === 'consent' && method === 'DELETE') return await withdrawConsent(db, patientId, actorId, now);
     if (tail === 'invites' && method === 'POST') return await createInvite(request, db, patientId, actorId, now);
     const member = /^members\/([A-Za-z0-9_-]{1,128})$/.exec(tail);
