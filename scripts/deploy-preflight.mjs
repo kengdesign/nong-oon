@@ -37,6 +37,17 @@ export function compareDeploymentSettings(input) {
       errors.push({ code: 'REQUIRED_SETTING_MISSING', setting: key });
     }
   }
+  // Equal snapshots do not make malformed switches safe or meaningful.
+  for (const key of ['SELF_CARE_ONLY', 'CARE_API_ENABLED', 'SERVICE_ADMIN_ENABLED',
+    'SCHEDULER_ENABLED', 'DELIVERY_ENABLED', 'INGESTION_ENABLED',
+    'SYNTHETIC_INGESTION_ENABLED', 'RETENTION_ENABLED', 'PRIVATE_RETENTION_ENABLED']) {
+    for (const snapshot of [input.before, input.after]) {
+      if (Object.hasOwn(snapshot, key) && !['true', 'false'].includes(snapshot[key])) {
+        errors.push({ code: 'INVALID_SWITCH', setting: key });
+        break;
+      }
+    }
+  }
   if (input.before.DELIVERY_ENABLED === 'true') {
     for (const key of ['DELIVERY_START_AT', 'DELIVERY_STOP_AT']) {
       const value = input.before[key];
