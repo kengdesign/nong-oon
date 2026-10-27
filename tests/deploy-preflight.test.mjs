@@ -49,6 +49,18 @@ test('invalid active pilot windows, duplicate recipients and wrong value types f
   }
 });
 
+test('matching malformed switches fail instead of certifying preservation', () => {
+  for (const setting of ['SELF_CARE_ONLY', 'CARE_API_ENABLED', 'SERVICE_ADMIN_ENABLED',
+    'SCHEDULER_ENABLED', 'DELIVERY_ENABLED', 'INGESTION_ENABLED',
+    'SYNTHETIC_INGESTION_ENABLED', 'RETENTION_ENABLED', 'PRIVATE_RETENTION_ENABLED']) {
+    for (const value of ['', 'TRUE', '1', ' true']) {
+      const settings = { ...pilot(), [setting]: value };
+      const result = compareDeploymentSettings({ before: settings, after: settings });
+      assert.ok(result.errors.some(error => error.code === 'INVALID_SWITCH' && error.setting === setting));
+    }
+  }
+});
+
 test('CLI returns nonzero with redacted output for malformed, oversized and changed input', () => {
   for (const input of ['private-malformed', 'x'.repeat(65_537),
     JSON.stringify({ before: pilot(), after: { ...pilot(), LINE_CHANNEL_ACCESS_TOKEN: 'private-new-token' } })]) {
