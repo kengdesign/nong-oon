@@ -1,3 +1,4 @@
+import {synthetic} from './synthetic-fixtures.mjs';
 // Isolated synthetic-only worker: no LINE, care DB, public routes or real media.
 const ID='synthetic-v1';
 const KEY='synthetic-drill/fixed-v1.bin';
@@ -42,10 +43,10 @@ async function ai(env){
     let state='failed';
     try{
       if(kind==='voice'){
-        const r=await env.AI.run('@cf/openai/whisper-large-v3-turbo',{audio:env.SYNTHETIC_WAV,task:'transcribe',language:'th',vad_filter:true});
+        const r=await env.AI.run('@cf/openai/whisper-large-v3-turbo',{audio:synthetic.wav,task:'transcribe',language:'th',vad_filter:true});
         if(typeof r.text!=='string')throw Error();
       }else{
-        const r=await fetch('https://vision.googleapis.com/v1/images:annotate',{method:'POST',redirect:'error',signal:AbortSignal.timeout(20000),headers:{'content-type':'application/json','x-goog-api-key':env.GOOGLE_VISION_API_KEY},body:JSON.stringify({requests:[{image:{content:env.SYNTHETIC_PNG},features:[{type:'DOCUMENT_TEXT_DETECTION'}]}]})});
+        const r=await fetch('https://vision.googleapis.com/v1/images:annotate',{method:'POST',redirect:'error',signal:AbortSignal.timeout(20000),headers:{'content-type':'application/json','x-goog-api-key':env.GOOGLE_VISION_API_KEY},body:JSON.stringify({requests:[{image:{content:synthetic.png},features:[{type:'DOCUMENT_TEXT_DETECTION'}]}]})});
         if(!r.ok)throw Error();const out=await r.json();if(!Array.isArray(out.responses)||out.responses.length!==1||out.responses[0].error)throw Error();
         if(!out.responses[0].fullTextAnnotation?.text?.includes('SYNTHETIC'))throw Error();
       }
