@@ -101,9 +101,13 @@ not evidence that the upcoming messages have been received.
 Pending: inspect reminder attempts, deduplication and report persistence during
 the approved window; obtain the owner's actual receipt feedback; verify effective
 delivery is closed after the deadline. Do not auto-extend or add recipients.
-Preserve these runtime settings during any deployment: repository defaults still
-disable delivery and clear the allowlist. This UI/status change should not be
-deployed over the approved pilot without reconciling the runtime configuration.
+Preserve these runtime settings during any deployment. PR #27 now sets
+`keep_vars: true` and removes repository variable overrides for the existing
+staging Worker. Its post-deployment inspection on 28 October confirmed unchanged
+runtime variable rows and binding rows, authenticated owner access and delivery
+closed after the approved stop. Secret values remain encrypted and unread.
+This UI/status release must preserve the same configuration and be checked again
+after deployment; it does not extend the pilot or enable production.
 
 Before production: review pilot results, production configuration and recovery
 procedure. Caregiver and real partner acceptance tests apply when those features
