@@ -7,6 +7,9 @@ import { processLineEvents } from './line-events.mjs';
 import { secure, boundedRequest } from './http.mjs';
 import { handleAdminApi } from './admin-api.mjs';
 import { deliveryWindowOpen } from './delivery.mjs';
+import { handleMediaApi } from './media-api.mjs';
+import { ingestMediaEvents } from './media-store.mjs';
+import { recoverMedia, handleMediaQueue } from './media-pipeline.mjs';
 export { PatientClock } from './patient-clock.mjs';
 export const MAX_WEBHOOK_BYTES = 64 * 1024;
 const json = (status, value) => new Response(JSON.stringify(value), {
@@ -87,7 +90,7 @@ async function route(request, env = {}, context = {}) {
       request = await boundedRequest(request);
       if (!request) return json(413, { error: 'PAYLOAD_TOO_LARGE' });
     }
-    const handler = path.startsWith('/api/admin/') ? handleAdminApi : handleCareApi;
+    const handler = path.startsWith('/api/media/') ? handleMediaApi : path.startsWith('/api/admin/') ? handleAdminApi : handleCareApi;
     const response = await handler(request, env, { actorId: identity.actorId, now: Date.now() });
     const patientId = response.headers.get('x-nongoon-wake-patient');
     if (response.ok && patientId) {
@@ -118,6 +121,10 @@ async function route(request, env = {}, context = {}) {
     try { await processLineEvents(env.DB, Date.now()); }
     catch { return json(503, { error: 'INBOX_PROCESSING_UNAVAILABLE' }); }
   }
+  if (env.MEDIA_API_ENABLED === 'true' && env.APP_ENV === 'staging') {
+    try { await ingestMediaEvents(env.DB, payload.events, {now:Date.now(),providerId:env.MEDIA_PROVIDER_ID}); }
+    catch { return json(503, {error:'MEDIA_INTAKE_UNAVAILABLE'}); }
+  }
   return json(200, { status: 'stored' });
 }
 export async function handleRequest(request, env = {}, context = {}) {
@@ -129,4 +136,12 @@ export async function handleRequest(request, env = {}, context = {}) {
     return secure(response);
   }
 }
-export default { fetch: handleRequest, scheduled: handleScheduled };
+export default { fetch: handleRequest, queue:handleMediaQueue, async scheduled(event,env,context) {
+  const result=await handleScheduled(event,env,context);
+  if(env.APP_ENV==='staging' && env.MEDIA_API_ENABLED==='true') {
+    try {await recoverMedia(env,Date.now());}
+    catch {console.warn(JSON.stringify({task:'media_recovery',outcome:'failed'}));}
+  }
+  return result;
+} };
+
