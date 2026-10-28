@@ -31,20 +31,6 @@
       "migrations_dir": "migrations"
     }
   ],
-  "vars": {
-    "APP_ENV": "staging",
-    "SELF_CARE_ONLY": "true",
-    "DELIVERY_ENABLED": "false",
-    "INGESTION_ENABLED": "false",
-    "SYNTHETIC_INGESTION_ENABLED": "false",
-    "RETENTION_ENABLED": "true",
-    "APP_ORIGIN": "https://staging.nongoon.com",
-    "LINE_LOGIN_CHANNEL_ID": "2012203704",
-    "CARE_API_ENABLED": "true",
-    "SCHEDULER_ENABLED": "true",
-    "LIVE_LINE_RECIPIENTS": "[]",
-    "PRIVATE_RETENTION_ENABLED": "true"
-  },
   "observability": {
     "enabled": true,
     "logs": {
@@ -70,5 +56,6 @@
         "PatientClock"
       ]
     }
-  ]
+  ],
+  "keep_vars": true
 }

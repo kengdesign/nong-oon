@@ -17,17 +17,21 @@ test('staging CPU budget is explicit and bounded per invocation', () => {
   assert.equal(config.limits.cpu_ms, 50);
 });
 
-test('staging prepares dose rounds while collection and LINE delivery remain disabled', () => {
-  assert.equal(config.vars.INGESTION_ENABLED, 'false');
-  assert.equal(config.vars.DELIVERY_ENABLED, 'false');
-  assert.equal(config.vars.SYNTHETIC_INGESTION_ENABLED, 'false');
-  assert.equal(config.vars.RETENTION_ENABLED, 'true');
-  assert.equal(config.vars.APP_ENV, 'staging');
-  assert.deepEqual(config.triggers, { crons: [RETENTION_CRON,RECOVERY_CRON] });
-  assert.equal(config.vars.SCHEDULER_ENABLED,'true');
-  assert.equal(deliveryConfig(config.vars), null);
-  assert.equal(config.vars.CARE_API_ENABLED,'true');
-  assert.deepEqual(JSON.parse(config.vars.LIVE_LINE_RECIPIENTS),[]);
+test('staging releases preserve dashboard runtime without overriding delivery guards', () => {
+  assert.equal(config.name, 'nong-oon-staging');
+  assert.equal(config.account_id, 'c5f673e7bdf271485603029e19f42f49');
+  assert.equal(config.keep_vars, true);
+  assert.equal(Object.hasOwn(config, 'vars'), false);
+  assert.deepEqual(config.triggers, { crons: [RETENTION_CRON, RECOVERY_CRON] });
+  assert.deepEqual(config.d1_databases.map(({binding,database_name,database_id}) =>
+    ({binding,database_name,database_id})), [{
+      binding: 'DB', database_name: 'nong-oon-staging',
+      database_id: '9a584c89-3b1f-4ae6-9b59-f97d1b75946d',
+    }]);
+  // A new Worker lacking existing runtime settings must never acquire delivery.
+  assert.equal(deliveryConfig({}), null);
+  assert.equal(deliveryConfig({APP_ENV:'staging', DELIVERY_ENABLED:'true',
+    SCHEDULER_ENABLED:'true'}), null);
   assert.equal(config.queues, undefined);
   assert.equal(config.ai, undefined);
 });
