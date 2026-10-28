@@ -1,5 +1,5 @@
 import { json } from './http.mjs';
-import { deliveryWindowOpen } from './delivery.mjs';
+import { deliveryWindowOpen, deliveryStatus } from './delivery.mjs';
 
 const actor = value => typeof value === 'string' && /^U[0-9a-f]{32}$/.test(value);
 const token = value => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
@@ -54,6 +54,7 @@ export async function handleAdminApi(request, env, {actorId,now=Date.now()}={}) 
     if(role==='none') fail(403,'ADMIN_FORBIDDEN');
     if(path==='/api/admin/status' && method==='GET') return json(200,{
       environment:env.APP_ENV??'unknown',deliveryEnabled:deliveryWindowOpen(env,now),
+      delivery:deliveryStatus(env,now),
       schedulerEnabled:env.SCHEDULER_ENABLED==='true',
       operations:await all(db,'SELECT task,last_ok_at AS lastOkAt,rows_processed AS rowsProcessed FROM operation_health ORDER BY task LIMIT 20'),
     });

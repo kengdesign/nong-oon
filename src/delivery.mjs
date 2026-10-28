@@ -28,6 +28,19 @@ export function deliveryConfig(env, now = Date.now()) {
   return { recipients, origin: origin.origin, token: env.LINE_CHANNEL_ACCESS_TOKEN };
 }
 
+// Operational metadata only: never expose allowlisted account IDs or credentials.
+export function deliveryStatus(env, now = Date.now()) {
+  const disabled = { state: 'disabled', startAt: null, stopAt: null };
+  if (env.DELIVERY_ENABLED !== 'true' || env.SCHEDULER_ENABLED !== 'true') return disabled;
+  const startAt = Number(env.DELIVERY_START_AT), stopAt = Number(env.DELIVERY_STOP_AT);
+  if (!validNow(now) || !deliveryWindowOpen(env, startAt)) {
+    if (env.APP_ENV !== 'staging' && env.DELIVERY_START_AT === undefined && env.DELIVERY_STOP_AT === undefined)
+      return { state: 'active', startAt: null, stopAt: null };
+    return { state: 'invalid', startAt: null, stopAt: null };
+  }
+  return { state: now < startAt ? 'scheduled' : now >= stopAt ? 'expired' : 'active', startAt, stopAt };
+}
+
 /** Generic lock-screen content; medication, patient and account data stay behind login. */
 export function notificationText(kind, origin) {
   const lead = kind === 'reminder'
