@@ -72,3 +72,32 @@ production deployment. Do not reuse staging data or silently enable production.
 Caregiver and real partner acceptance/revocation require their own accounts only
 when those features are released. They do not block the owner's self-care pilot.
 OCR, voice, payments and dose recommendations remain outside this release.
+
+## Staging release preservation — 28 October 2026
+
+The root Wrangler configuration now sets `keep_vars: true` and omits `vars`.
+Automatic builds therefore retain existing dashboard runtime variables rather
+than applying the previous delivery-disabled and empty-allowlist defaults.
+This configuration targets the existing staging Worker only. It is not a
+bootstrap configuration for a new Worker: existing environment, origin,
+ingestion/delivery guards and owner configuration must be inspected first.
+Secrets are retained without uploading or deleting any secret values.
+
+Pre-release read-only inspection confirmed the approved window was expired,
+one allowlisted recipient, unchanged staging bindings, authenticated owner
+access, ingestion disabled and scheduler/retention enabled. The preflight
+comparison passed for the preservation projection; the encrypted administrator
+switch was verified through authenticated owner access, while remaining
+encrypted values used unchanged opaque references. This does not certify
+post-deployment values; reload and compare them after each release.
+
+Pilot D1 aggregates: six expected occurrences, six recorded doses and six
+accepted reminder jobs; six attempts, no retries, no duplicate outbox-key groups,
+no missing expected dose/acceptance, and no recorded attempt or acceptance at or
+after the exclusive stop. Attempted recipients matched the owner. These are
+database observations, not proof of handset receipt or full HTTP telemetry.
+
+The combined PR 26/27 review copy passed syntax checks and 135 tests.
+The owner also completed a Wrangler 4.154.0 dry run using the equivalent
+runtime-preserving configuration. No production activation, pilot extension,
+recipient expansion or schema migration is part of this release.
