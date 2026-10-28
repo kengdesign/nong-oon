@@ -3,7 +3,7 @@ import { parseDraft } from './draft-contract.mjs';
 export const MEDIA_LEASE_MS=120_000;
 export const mediaId=v=>typeof v==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(v);
 export const mediaNow=v=>Number.isSafeInteger(v)&&v>=0&&v<=Number.MAX_SAFE_INTEGER-MEDIA_TTL_MS*31;
-export const PROVIDERS=Object.freeze({'workers-ai-whisper-v1':'Cloudflare Workers AI','google-vision-v1':'Google Cloud Vision'});
+export const PROVIDERS=Object.freeze({'workers-ai-whisper-v1':'Cloudflare Workers AI','google-vision-v1':'Google Cloud Vision','cloudflare-whisper-google-vision-v1':'Cloudflare Workers AI (เสียง) และ Google Cloud Vision (ภาพ)'});
 export class MediaError extends Error {constructor(code,status=400){super(code);this.code=code;this.status=status;}}
 export const reject=(code,status=400)=>{throw new MediaError(code,status);};
 export const stmt=(db,sql,args=[])=>db.prepare(sql).bind(...args);

@@ -1,3 +1,4 @@
+import {createMediaInfer} from './media-providers.mjs';
 import { all,batch,stmt,checked,MediaError,mediaId,claimMediaJob,mediaLeaseValid,saveMediaDraft,dispatchMediaJobs,cleanupMedia } from './media-store.mjs';
 const MAX_BYTES=5*1024*1024;
 const fail=code=>{throw new MediaError(code,422);};
@@ -31,10 +32,11 @@ export async function readLineMedia(messageId,kind,token,{fetcher=fetch}={}){
 }
 
 // infer is a server-installed adapter (tests inject a deterministic fake).
-// No provider adapter is installed in the deployed Worker by this foundation.
+// Provider calls additionally require an explicit provider gate and bindings.
 export async function processMediaJob(env,jobId,{clock=Date.now,fetcher=fetch,infer}={}){
   if(env.APP_ENV!=='staging'||env.MEDIA_PROCESSING_ENABLED!=='true'||env.MEDIA_API_ENABLED!=='true')return {outcome:'disabled'};
   if(!mediaId(jobId))return {outcome:'invalid'};
+  infer??=createMediaInfer(env,{fetcher});
   if(typeof infer!=='function')return {outcome:'provider_not_ready'};
   const job=await claimMediaJob(env.DB,jobId,clock(),env.MEDIA_PROVIDER_ID);
   if(!job)return {outcome:'not_claimed'};

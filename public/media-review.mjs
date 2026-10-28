@@ -29,7 +29,7 @@ async function render(){session=await api('/api/session');if(!session.authentica
   select.addEventListener('change',()=>{patientId=select.value;task(render);});root.replaceChildren(label);
   const consent=await api(base()+'/consent');
   root.append(card('ภาพและเสียงของคุณ',node('p',`ผู้ประมวลผลที่เลือก: ${consent.provider}`),
-    node('p','ใช้ภาพ/เสียงเพื่อเตรียมร่างตาราง เก็บต้นฉบับไม่เกิน 24 ชั่วโมงและลบเมื่อหมดความจำเป็น คุณถอนความยินยอมได้โดยไม่ลบตารางที่เคยยืนยัน'),
+    node('p','ใช้ภาพ/เสียงเพื่อเตรียมร่างตาราง จำกัดการเข้าถึงต้นฉบับ 24 ชั่วโมง แล้วเข้าคิวลบ การลบจริงอาจล่าช้าหากบริการขัดข้อง คุณถอนความยินยอมได้โดยไม่ลบตารางที่เคยยืนยัน'),
     consent.consented?button('ถอนความยินยอมภาพและเสียง',async()=>{await api(base()+'/consent','DELETE');await render();}):
       button('ยินยอมให้ประมวลผลภาพและเสียง',async()=>{await api(base()+'/consent','POST',{consent:true,version:consent.version});await render();})));
   if(!consent.consented)return;
