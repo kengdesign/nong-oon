@@ -122,11 +122,19 @@ export async function cleanupMedia(env,now){
     stmt(env.DB,`DELETE FROM media_reviews WHERE job_id IN (SELECT id FROM media_jobs WHERE state IN ('confirmed','cancelled','expired','failed') OR expires_at<=?)`,[now])]);
   const rows=await all(env.DB,`SELECT id,object_key FROM media_jobs WHERE (state IN ('confirmed','cancelled','expired','failed') OR expires_at<=?)
     AND (lease_until IS NULL OR lease_until<=?) ORDER BY updated_at,id LIMIT 20`,[now,now]);
+  let failed=false;
   for(const row of rows){
     // Repeat deletion on later sweeps: a delayed external put cannot silently
     // orphan the random object key. Do not drop manifests before a rollout policy exists.
-    await env.MEDIA_R2.delete(row.object_key);
-    checked(await stmt(env.DB,'UPDATE media_jobs SET updated_at=? WHERE id=?',[now,row.id]).run());
+    try{
+      await env.MEDIA_R2.delete(row.object_key);
+      checked(await stmt(env.DB,'UPDATE media_jobs SET updated_at=? WHERE id=?',[now,row.id]).run());
+    }catch{
+      // A broken object must not prevent other eligible objects being erased.
+      // Retain its manifest and surface only a fixed, private-data-free code.
+      failed=true;
+    }
   }
+  if(failed)reject('MEDIA_CLEANUP_INCOMPLETE',503);
   return {deleted:rows.length};
 }
