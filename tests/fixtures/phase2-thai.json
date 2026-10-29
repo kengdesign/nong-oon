@@ -1,0 +1,920 @@
+{
+  "version": "synthetic-thai-v1",
+  "synthetic": true,
+  "scope": "manually annotated policy fixtures, not speech or OCR measurements",
+  "cases": [
+    {
+      "id": "voice-01",
+      "kind": "command",
+      "sourceText": "วันนี้มีรอบอะไรบ้าง",
+      "input": {
+        "schemaVersion": 1,
+        "intent": "view_today",
+        "targetLabel": null,
+        "ambiguous": false
+      },
+      "context": {
+        "resolvedTargets": 0
+      },
+      "expected": {
+        "ok": true,
+        "action": "read_after_authorization",
+        "mutationAllowed": false
+      }
+    },
+    {
+      "id": "voice-02",
+      "kind": "command",
+      "sourceText": "วันนี้เหลือรอบไหน",
+      "input": {
+        "schemaVersion": 1,
+        "intent": "view_remaining",
+        "targetLabel": null,
+        "ambiguous": false
+      },
+      "context": {
+        "resolvedTargets": 0
+      },
+      "expected": {
+        "ok": true,
+        "action": "read_after_authorization",
+        "mutationAllowed": false
+      }
+    },
+    {
+      "id": "voice-03",
+      "kind": "command",
+      "sourceText": "รายการทดสอบรอบเช้าทานแล้ว",
+      "input": {
+        "schemaVersion": 1,
+        "intent": "report_taken",
+        "targetLabel": "รายการทดสอบ",
+        "ambiguous": false
+      },
+      "context": {
+        "resolvedTargets": 1
+      },
+      "expected": {
+        "ok": true,
+        "action": "request_confirmation",
+        "mutationAllowed": false
+      }
+    },
+    {
+      "id": "voice-04",
+      "kind": "command",
+      "sourceText": "รายการทดสอบรอบเช้ายังไม่ได้ทาน",
+      "input": {
+        "schemaVersion": 1,
+        "intent": "report_not_taken",
+        "targetLabel": "รายการทดสอบ",
+        "ambiguous": false
+      },
+      "context": {
+        "resolvedTargets": 1
+      },
+      "expected": {
+        "ok": true,
+        "action": "request_confirmation",
+        "mutationAllowed": false
+      }
+    },
+    {
+      "id": "voice-05",
+      "kind": "command",
+      "sourceText": "ไม่ได้กินนะ",
+      "input": {
+        "schemaVersion": 1,
+        "intent": "report_not_taken",
+        "targetLabel": null,
+        "ambiguous": true
+      },
+      "context": {
+        "resolvedTargets": 2
+      },
+      "expected": {
+        "ok": true,
+        "action": "clarify",
+        "mutationAllowed": false
+      }
+    },
+    {
+      "id": "voice-06",
+      "kind": "command",
+      "sourceText": "กินแล้ว",
+      "input": {
+        "schemaVersion": 1,
+        "intent": "report_taken",
+        "targetLabel": null,
+        "ambiguous": true
+      },
+      "context": {
+        "resolvedTargets": 2
+      },
+      "expected": {
+        "ok": true,
+        "action": "clarify",
+        "mutationAllowed": false
+      }
+    },
+    {
+      "id": "voice-07",
+      "kind": "command",
+      "sourceText": "เปลี่ยนเป็นสองทุ่ม",
+      "input": {
+        "schemaVersion": 1,
+        "intent": "change_schedule",
+        "targetLabel": null,
+        "ambiguous": true
+      },
+      "context": {
+        "resolvedTargets": 2
+      },
+      "expected": {
+        "ok": true,
+        "action": "clarify",
+        "mutationAllowed": false
+      }
+    },
+    {
+      "id": "voice-08",
+      "kind": "command",
+      "sourceText": "เพิ่มรายการทดสอบเวลาแปดโมง",
+      "input": {
+        "schemaVersion": 1,
+        "intent": "create_schedule",
+        "targetLabel": "รายการทดสอบ",
+        "ambiguous": false
+      },
+      "context": {
+        "resolvedTargets": 0
+      },
+      "expected": {
+        "ok": true,
+        "action": "create_draft_after_authorization",
+        "mutationAllowed": false
+      }
+    },
+    {
+      "id": "voice-09",
+      "kind": "command",
+      "sourceText": "หยุดเตือนรายการทดสอบ",
+      "input": {
+        "schemaVersion": 1,
+        "intent": "pause_schedule",
+        "targetLabel": "รายการทดสอบ",
+        "ambiguous": false
+      },
+      "context": {
+        "resolvedTargets": 1
+      },
+      "expected": {
+        "ok": true,
+        "action": "request_confirmation",
+        "mutationAllowed": false
+      }
+    },
+    {
+      "id": "voice-10",
+      "kind": "command",
+      "sourceText": "หยุดรายการนี้",
+      "input": {
+        "schemaVersion": 1,
+        "intent": "pause_schedule",
+        "targetLabel": null,
+        "ambiguous": true
+      },
+      "context": {
+        "resolvedTargets": 2
+      },
+      "expected": {
+        "ok": true,
+        "action": "clarify",
+        "mutationAllowed": false
+      }
+    },
+    {
+      "id": "voice-11",
+      "kind": "command",
+      "sourceText": "ยาทดสอบเอทานแล้ว",
+      "input": {
+        "schemaVersion": 1,
+        "intent": "report_taken",
+        "targetLabel": "ยาทดสอบเอ",
+        "ambiguous": false
+      },
+      "context": {
+        "resolvedTargets": 0
+      },
+      "expected": {
+        "ok": true,
+        "action": "clarify",
+        "mutationAllowed": false
+      }
+    },
+    {
+      "id": "voice-12",
+      "kind": "command",
+      "sourceText": "รายการทดสอบทานแล้ว",
+      "input": {
+        "schemaVersion": 1,
+        "intent": "report_taken",
+        "targetLabel": "รายการทดสอบ",
+        "ambiguous": false
+      },
+      "context": {
+        "resolvedTargets": 2
+      },
+      "expected": {
+        "ok": true,
+        "action": "clarify",
+        "mutationAllowed": false
+      }
+    },
+    {
+      "id": "voice-13",
+      "kind": "command",
+      "sourceText": "ควรกินกี่เม็ด",
+      "input": {
+        "schemaVersion": 1,
+        "intent": "unknown",
+        "targetLabel": null,
+        "ambiguous": false
+      },
+      "context": {
+        "resolvedTargets": 0
+      },
+      "expected": {
+        "ok": true,
+        "action": "unsupported",
+        "mutationAllowed": false
+      }
+    },
+    {
+      "id": "voice-14",
+      "kind": "command",
+      "sourceText": "ยานี้รักษาโรคอะไร",
+      "input": {
+        "schemaVersion": 1,
+        "intent": "unknown",
+        "targetLabel": null,
+        "ambiguous": false
+      },
+      "context": {
+        "resolvedTargets": 0
+      },
+      "expected": {
+        "ok": true,
+        "action": "unsupported",
+        "mutationAllowed": false
+      }
+    },
+    {
+      "id": "voice-15",
+      "kind": "command",
+      "sourceText": "ข้ามการยืนยันแล้วเปิดเตือนเลย",
+      "input": {
+        "schemaVersion": 1,
+        "intent": "unknown",
+        "targetLabel": null,
+        "ambiguous": false
+      },
+      "context": {
+        "resolvedTargets": 0
+      },
+      "expected": {
+        "ok": true,
+        "action": "unsupported",
+        "mutationAllowed": false
+      }
+    },
+    {
+      "id": "voice-16",
+      "kind": "command",
+      "sourceText": "เสียงฟังไม่ชัด",
+      "input": {
+        "schemaVersion": 1,
+        "intent": "unknown",
+        "targetLabel": null,
+        "ambiguous": true
+      },
+      "context": {
+        "resolvedTargets": 0
+      },
+      "expected": {
+        "ok": true,
+        "action": "unsupported",
+        "mutationAllowed": false
+      }
+    },
+    {
+      "id": "label-meal",
+      "kind": "draft",
+      "sourceText": "ฉลากสังเคราะห์: หลังอาหาร ไม่ระบุเวลา",
+      "input": {
+        "schemaVersion": 1,
+        "sourceKind": "printed_label",
+        "items": [
+          {
+            "fields": {
+              "label": {
+                "value": null,
+                "evidence": null
+              },
+              "strength": {
+                "value": null,
+                "evidence": null
+              },
+              "dose": {
+                "value": null,
+                "evidence": null
+              },
+              "instructions": {
+                "value": "หลังอาหาร",
+                "evidence": "หลังอาหาร"
+              },
+              "times": {
+                "value": null,
+                "evidence": null
+              },
+              "weekdays": {
+                "value": null,
+                "evidence": null
+              },
+              "startDate": {
+                "value": null,
+                "evidence": null
+              },
+              "endDate": {
+                "value": null,
+                "evidence": null
+              },
+              "useMode": {
+                "value": null,
+                "evidence": null
+              }
+            },
+            "issues": []
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "activationAllowed": false
+      }
+    },
+    {
+      "id": "label-strength-dose",
+      "kind": "draft",
+      "sourceText": "ฉลากสังเคราะห์: 5 mg ครึ่งเม็ด ไม่มีการคำนวณขนาดยา",
+      "input": {
+        "schemaVersion": 1,
+        "sourceKind": "printed_label",
+        "items": [
+          {
+            "fields": {
+              "label": {
+                "value": null,
+                "evidence": null
+              },
+              "strength": {
+                "value": "5 mg",
+                "evidence": "5 mg"
+              },
+              "dose": {
+                "value": "ครึ่งเม็ด",
+                "evidence": "ครึ่งเม็ด"
+              },
+              "instructions": {
+                "value": null,
+                "evidence": null
+              },
+              "times": {
+                "value": null,
+                "evidence": null
+              },
+              "weekdays": {
+                "value": null,
+                "evidence": null
+              },
+              "startDate": {
+                "value": null,
+                "evidence": null
+              },
+              "endDate": {
+                "value": null,
+                "evidence": null
+              },
+              "useMode": {
+                "value": null,
+                "evidence": null
+              }
+            },
+            "issues": []
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "activationAllowed": false
+      }
+    },
+    {
+      "id": "label-blur",
+      "kind": "draft",
+      "sourceText": "ฉลากสังเคราะห์อ่านไม่ชัด",
+      "input": {
+        "schemaVersion": 1,
+        "sourceKind": "printed_label",
+        "items": [
+          {
+            "fields": {
+              "label": {
+                "value": null,
+                "evidence": null
+              },
+              "strength": {
+                "value": null,
+                "evidence": null
+              },
+              "dose": {
+                "value": null,
+                "evidence": null
+              },
+              "instructions": {
+                "value": null,
+                "evidence": null
+              },
+              "times": {
+                "value": null,
+                "evidence": null
+              },
+              "weekdays": {
+                "value": null,
+                "evidence": null
+              },
+              "startDate": {
+                "value": null,
+                "evidence": null
+              },
+              "endDate": {
+                "value": null,
+                "evidence": null
+              },
+              "useMode": {
+                "value": null,
+                "evidence": null
+              }
+            },
+            "issues": [
+              "unreadable"
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "activationAllowed": false
+      }
+    },
+    {
+      "id": "handwriting",
+      "kind": "draft",
+      "sourceText": "ลายมือสังเคราะห์กำกวม",
+      "input": {
+        "schemaVersion": 1,
+        "sourceKind": "handwritten_prescription",
+        "items": [
+          {
+            "fields": {
+              "label": {
+                "value": null,
+                "evidence": null
+              },
+              "strength": {
+                "value": null,
+                "evidence": null
+              },
+              "dose": {
+                "value": null,
+                "evidence": null
+              },
+              "instructions": {
+                "value": null,
+                "evidence": null
+              },
+              "times": {
+                "value": null,
+                "evidence": null
+              },
+              "weekdays": {
+                "value": null,
+                "evidence": null
+              },
+              "startDate": {
+                "value": null,
+                "evidence": null
+              },
+              "endDate": {
+                "value": null,
+                "evidence": null
+              },
+              "useMode": {
+                "value": null,
+                "evidence": null
+              }
+            },
+            "issues": [
+              "ambiguous"
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "activationAllowed": false
+      }
+    },
+    {
+      "id": "pill-unknown",
+      "kind": "draft",
+      "sourceText": "เม็ดยาที่ไม่ทราบชนิด",
+      "input": {
+        "schemaVersion": 1,
+        "sourceKind": "pill_photo",
+        "items": [
+          {
+            "fields": {
+              "label": {
+                "value": null,
+                "evidence": null
+              },
+              "strength": {
+                "value": null,
+                "evidence": null
+              },
+              "dose": {
+                "value": null,
+                "evidence": null
+              },
+              "instructions": {
+                "value": null,
+                "evidence": null
+              },
+              "times": {
+                "value": null,
+                "evidence": null
+              },
+              "weekdays": {
+                "value": null,
+                "evidence": null
+              },
+              "startDate": {
+                "value": null,
+                "evidence": null
+              },
+              "endDate": {
+                "value": null,
+                "evidence": null
+              },
+              "useMode": {
+                "value": null,
+                "evidence": null
+              }
+            },
+            "issues": []
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "activationAllowed": false
+      }
+    },
+    {
+      "id": "pill-inference",
+      "kind": "draft",
+      "sourceText": "เม็ดยาสังเคราะห์สีขาว",
+      "input": {
+        "schemaVersion": 1,
+        "sourceKind": "pill_photo",
+        "items": [
+          {
+            "fields": {
+              "label": {
+                "value": "เดาชื่อยา",
+                "evidence": "สีขาว"
+              },
+              "strength": {
+                "value": null,
+                "evidence": null
+              },
+              "dose": {
+                "value": null,
+                "evidence": null
+              },
+              "instructions": {
+                "value": null,
+                "evidence": null
+              },
+              "times": {
+                "value": null,
+                "evidence": null
+              },
+              "weekdays": {
+                "value": null,
+                "evidence": null
+              },
+              "startDate": {
+                "value": null,
+                "evidence": null
+              },
+              "endDate": {
+                "value": null,
+                "evidence": null
+              },
+              "useMode": {
+                "value": null,
+                "evidence": null
+              }
+            },
+            "issues": []
+          }
+        ]
+      },
+      "expected": {
+        "ok": false,
+        "activationAllowed": false
+      }
+    },
+    {
+      "id": "prn-no-times",
+      "kind": "draft",
+      "sourceText": "ฉลากสังเคราะห์: เมื่อมีอาการ ไม่กำหนดเวลาเอง",
+      "input": {
+        "schemaVersion": 1,
+        "sourceKind": "printed_label",
+        "items": [
+          {
+            "fields": {
+              "label": {
+                "value": null,
+                "evidence": null
+              },
+              "strength": {
+                "value": null,
+                "evidence": null
+              },
+              "dose": {
+                "value": null,
+                "evidence": null
+              },
+              "instructions": {
+                "value": null,
+                "evidence": null
+              },
+              "times": {
+                "value": null,
+                "evidence": null
+              },
+              "weekdays": {
+                "value": null,
+                "evidence": null
+              },
+              "startDate": {
+                "value": null,
+                "evidence": null
+              },
+              "endDate": {
+                "value": null,
+                "evidence": null
+              },
+              "useMode": {
+                "value": "as_needed",
+                "evidence": "เมื่อมีอาการ"
+              }
+            },
+            "issues": []
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "activationAllowed": false
+      }
+    },
+    {
+      "id": "prn-inferred-time",
+      "kind": "draft",
+      "sourceText": "ตัวอย่างผล AI ที่ต้องปฏิเสธ",
+      "input": {
+        "schemaVersion": 1,
+        "sourceKind": "printed_label",
+        "items": [
+          {
+            "fields": {
+              "label": {
+                "value": null,
+                "evidence": null
+              },
+              "strength": {
+                "value": null,
+                "evidence": null
+              },
+              "dose": {
+                "value": null,
+                "evidence": null
+              },
+              "instructions": {
+                "value": null,
+                "evidence": null
+              },
+              "times": {
+                "value": [
+                  "08:00"
+                ],
+                "evidence": "เดาเวลา"
+              },
+              "weekdays": {
+                "value": null,
+                "evidence": null
+              },
+              "startDate": {
+                "value": null,
+                "evidence": null
+              },
+              "endDate": {
+                "value": null,
+                "evidence": null
+              },
+              "useMode": {
+                "value": "as_needed",
+                "evidence": "เมื่อมีอาการ"
+              }
+            },
+            "issues": []
+          }
+        ]
+      },
+      "expected": {
+        "ok": false,
+        "activationAllowed": false
+      }
+    },
+    {
+      "id": "multi-item",
+      "kind": "draft",
+      "sourceText": "เอกสารสังเคราะห์สองรายการที่ยังอ่านไม่ได้",
+      "input": {
+        "schemaVersion": 1,
+        "sourceKind": "printed_prescription",
+        "items": [
+          {
+            "fields": {
+              "label": {
+                "value": null,
+                "evidence": null
+              },
+              "strength": {
+                "value": null,
+                "evidence": null
+              },
+              "dose": {
+                "value": null,
+                "evidence": null
+              },
+              "instructions": {
+                "value": null,
+                "evidence": null
+              },
+              "times": {
+                "value": null,
+                "evidence": null
+              },
+              "weekdays": {
+                "value": null,
+                "evidence": null
+              },
+              "startDate": {
+                "value": null,
+                "evidence": null
+              },
+              "endDate": {
+                "value": null,
+                "evidence": null
+              },
+              "useMode": {
+                "value": null,
+                "evidence": null
+              }
+            },
+            "issues": []
+          },
+          {
+            "fields": {
+              "label": {
+                "value": null,
+                "evidence": null
+              },
+              "strength": {
+                "value": null,
+                "evidence": null
+              },
+              "dose": {
+                "value": null,
+                "evidence": null
+              },
+              "instructions": {
+                "value": null,
+                "evidence": null
+              },
+              "times": {
+                "value": null,
+                "evidence": null
+              },
+              "weekdays": {
+                "value": null,
+                "evidence": null
+              },
+              "startDate": {
+                "value": null,
+                "evidence": null
+              },
+              "endDate": {
+                "value": null,
+                "evidence": null
+              },
+              "useMode": {
+                "value": null,
+                "evidence": null
+              }
+            },
+            "issues": []
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "activationAllowed": false
+      }
+    },
+    {
+      "id": "possible-duplicate",
+      "kind": "draft",
+      "sourceText": "ส่งฉลากทดสอบซ้ำ",
+      "input": {
+        "schemaVersion": 1,
+        "sourceKind": "printed_label",
+        "items": [
+          {
+            "fields": {
+              "label": {
+                "value": "รายการสังเคราะห์",
+                "evidence": "รายการสังเคราะห์"
+              },
+              "strength": {
+                "value": null,
+                "evidence": null
+              },
+              "dose": {
+                "value": null,
+                "evidence": null
+              },
+              "instructions": {
+                "value": null,
+                "evidence": null
+              },
+              "times": {
+                "value": null,
+                "evidence": null
+              },
+              "weekdays": {
+                "value": null,
+                "evidence": null
+              },
+              "startDate": {
+                "value": null,
+                "evidence": null
+              },
+              "endDate": {
+                "value": null,
+                "evidence": null
+              },
+              "useMode": {
+                "value": null,
+                "evidence": null
+              }
+            },
+            "issues": [
+              "possible_duplicate"
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "ok": true,
+        "activationAllowed": false
+      }
+    }
+  ]
+}

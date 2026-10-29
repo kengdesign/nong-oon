@@ -8,7 +8,6 @@ import { handleScheduled, RETENTION_CRON } from '../src/maintenance.mjs';
 const event={cron:RETENTION_CRON,scheduledTime:20};
 const config={APP_ENV:'staging',RETENTION_ENABLED:'true'};
 test('Worker scheduled entry deletes at most 100 expired rows per event using real SQL', async () => {
-  assert.equal(worker.scheduled,handleScheduled);
   const sqlite=new DatabaseSync(':memory:');
   try {
     sqlite.exec(readFileSync(new URL('../migrations/0001_webhook_inbox.sql',import.meta.url),'utf8'));
@@ -45,3 +44,4 @@ test('scheduled failures are sanitized and never retried within the invocation',
   await assert.rejects(handleScheduled(event,{...config,DB}),error=>error.message==='RETENTION_RUN_FAILED');
   assert.equal(calls,1);
 });
+

@@ -1,0 +1,457 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Nong Oon untrusted extraction draft v1",
+  "description": "Shape contract only. Runtime calendar, date ordering, PRN and pill-photo checks remain required. Never authorizes a write.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceKind",
+    "items"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "sourceKind": {
+      "enum": [
+        "voice",
+        "printed_label",
+        "printed_prescription",
+        "handwritten_prescription",
+        "pill_photo"
+      ]
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fields",
+          "issues"
+        ],
+        "properties": {
+          "fields": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "label",
+              "strength",
+              "dose",
+              "instructions",
+              "times",
+              "weekdays",
+              "startDate",
+              "endDate",
+              "useMode"
+            ],
+            "properties": {
+              "label": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "null"
+                      },
+                      "evidence": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120,
+                        "pattern": "^(?!.*[\\u0000-\\u001f\\u007f])\\S(?:[\\s\\S]*\\S)?$"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?!.*[\\u0000-\\u001f\\u007f])\\S(?:[\\s\\S]*\\S)?$"
+                      }
+                    }
+                  }
+                ]
+              },
+              "strength": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "null"
+                      },
+                      "evidence": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120,
+                        "pattern": "^(?!.*[\\u0000-\\u001f\\u007f])\\S(?:[\\s\\S]*\\S)?$"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?!.*[\\u0000-\\u001f\\u007f])\\S(?:[\\s\\S]*\\S)?$"
+                      }
+                    }
+                  }
+                ]
+              },
+              "dose": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "null"
+                      },
+                      "evidence": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120,
+                        "pattern": "^(?!.*[\\u0000-\\u001f\\u007f])\\S(?:[\\s\\S]*\\S)?$"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?!.*[\\u0000-\\u001f\\u007f])\\S(?:[\\s\\S]*\\S)?$"
+                      }
+                    }
+                  }
+                ]
+              },
+              "instructions": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "null"
+                      },
+                      "evidence": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?!.*[\\u0000-\\u001f\\u007f])\\S(?:[\\s\\S]*\\S)?$"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?!.*[\\u0000-\\u001f\\u007f])\\S(?:[\\s\\S]*\\S)?$"
+                      }
+                    }
+                  }
+                ]
+              },
+              "times": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "null"
+                      },
+                      "evidence": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 8,
+                        "uniqueItems": true,
+                        "items": {
+                          "type": "string",
+                          "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+                        }
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?!.*[\\u0000-\\u001f\\u007f])\\S(?:[\\s\\S]*\\S)?$"
+                      }
+                    }
+                  }
+                ]
+              },
+              "weekdays": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "null"
+                      },
+                      "evidence": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 7,
+                        "uniqueItems": true,
+                        "items": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 6
+                        }
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?!.*[\\u0000-\\u001f\\u007f])\\S(?:[\\s\\S]*\\S)?$"
+                      }
+                    }
+                  }
+                ]
+              },
+              "startDate": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "null"
+                      },
+                      "evidence": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "format": "date",
+                        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?!.*[\\u0000-\\u001f\\u007f])\\S(?:[\\s\\S]*\\S)?$"
+                      }
+                    }
+                  }
+                ]
+              },
+              "endDate": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "null"
+                      },
+                      "evidence": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "format": "date",
+                        "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?!.*[\\u0000-\\u001f\\u007f])\\S(?:[\\s\\S]*\\S)?$"
+                      }
+                    }
+                  }
+                ]
+              },
+              "useMode": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "type": "null"
+                      },
+                      "evidence": {
+                        "type": "null"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "value",
+                      "evidence"
+                    ],
+                    "properties": {
+                      "value": {
+                        "enum": [
+                          "scheduled",
+                          "as_needed"
+                        ]
+                      },
+                      "evidence": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "pattern": "^(?!.*[\\u0000-\\u001f\\u007f])\\S(?:[\\s\\S]*\\S)?$"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "issues": {
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "unreadable",
+                "ambiguous",
+                "conflicting",
+                "possible_duplicate",
+                "unsupported_regimen"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,10 @@
+import {readFileSync,writeFileSync} from 'node:fs';
+const c=JSON.parse(readFileSync('wrangler.jsonc','utf8'));
+if(c.name!=='nong-oon-staging')throw Error('Unexpected Worker');
+if(c.vars)throw Error('Review runtime variables before preparing config');
+c.keep_vars=true;
+c.r2_buckets=[{binding:'MEDIA_R2',bucket_name:'nong-oon-staging-media'}];
+c.queues={producers:[{binding:'MEDIA_QUEUE',queue:'nong-oon-staging-media'}],consumers:[{queue:'nong-oon-staging-media',max_batch_size:1,max_batch_timeout:5,max_retries:3,max_concurrency:1,retry_delay:60,dead_letter_queue:'nong-oon-staging-media-dlq'}]};
+c.ai={binding:'AI'};
+writeFileSync('wrangler.phase2.jsonc',JSON.stringify(c,null,2)+'\n');
+console.log('Prepared config only; no resources created or deployed');

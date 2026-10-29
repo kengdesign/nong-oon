@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Nong Oon untrusted command v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "intent",
+    "targetLabel",
+    "ambiguous"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "intent": {
+      "enum": [
+        "view_today",
+        "view_remaining",
+        "report_taken",
+        "report_not_taken",
+        "create_schedule",
+        "change_schedule",
+        "pause_schedule",
+        "unknown"
+      ]
+    },
+    "targetLabel": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "pattern": "^(?!.*[\\u0000-\\u001f\\u007f])\\S(?:[\\s\\S]*\\S)?$"
+        }
+      ]
+    },
+    "ambiguous": {
+      "type": "boolean"
+    }
+  }
+}
