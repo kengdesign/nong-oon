@@ -11,7 +11,7 @@ function distance(a,b){let previous=Array.from({length:b.length+1},(_,i)=>i);
 export function evaluateMediaPredictions(input){
   if(!input||input.version!==1||!Array.isArray(input.cases)||input.cases.length<1||input.cases.length>100)throw Error('INVALID_EVALUATION');
   const totals={cases:input.cases.length,transcripts:0,referenceCodepoints:0,editDistance:0,invalidDrafts:0,itemCountMismatches:0,
-    fieldMatches:Object.fromEntries(keys.map(k=>[k,0])),fieldTotals:Object.fromEntries(keys.map(k=>[k,0]))};
+    fieldUnknowns:Object.fromEntries(keys.map(k=>[k,0])),fieldMatches:Object.fromEntries(keys.map(k=>[k,0])),fieldTotals:Object.fromEntries(keys.map(k=>[k,0]))};
   let textBudget=0;
   for(const example of input.cases){
     if(Object.hasOwn(example,'referenceTranscript')||Object.hasOwn(example,'predictedTranscript')){
@@ -26,6 +26,7 @@ export function evaluateMediaPredictions(input){
       if(prediction.ok&&prediction.draft.items.length!==gold.draft.items.length)totals.itemCountMismatches++;
       const aligned=prediction.ok&&prediction.draft.items.length===gold.draft.items.length&&prediction.draft.sourceKind===gold.draft.sourceKind;
       for(let i=0;i<gold.draft.items.length;i++)for(const key of keys){
+        if(gold.draft.items[i].fields[key].value===null){totals.fieldUnknowns[key]++;continue;}
         totals.fieldTotals[key]++;if(aligned&&JSON.stringify(gold.draft.items[i].fields[key].value)===JSON.stringify(prediction.draft.items[i].fields[key].value))totals.fieldMatches[key]++;
       }
     }

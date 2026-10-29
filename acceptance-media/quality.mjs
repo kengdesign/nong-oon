@@ -8,16 +8,14 @@ export async function measureSample(env,input,{fetcher=fetch}={}){
   const sourceKind=input.kind==='image'?'printed_label':'voice';
   const providerId=input.kind==='image'?'google-vision-v1':'workers-ai-whisper-v1';
   let transcript='';
-  const configured={...env,MEDIA_PROVIDER_ENABLED:'true',MEDIA_PROVIDER_ID:providerId,
-    AI:{async run(...args){const result=await env.AI.run(...args);transcript=result?.text;return result;}}};
-  const capture=async(...args)=>{const response=await fetcher(...args);try{const out=await response.clone().json();transcript=out.responses?.[0]?.fullTextAnnotation?.text;}catch{}return response;};
-  const infer=createMediaInfer(configured,{fetcher:capture});if(!infer)throw Error('PROVIDER_NOT_CONFIGURED');
+  const configured={...env,MEDIA_PROVIDER_ENABLED:'true',MEDIA_PROVIDER_ID:providerId};
+  const infer=createMediaInfer(configured,{fetcher,onTranscript:text=>{transcript=text;}});if(!infer)throw Error('PROVIDER_NOT_CONFIGURED');
   const predicted=JSON.parse(await infer({bytes,contentType:input.contentType,sourceKind,providerId,signal:AbortSignal.timeout(60000)}));
   const referenceDraft=JSON.parse(draftFromText(input.reference,sourceKind));
   const metrics=evaluateMediaPredictions({version:1,cases:[{referenceTranscript:input.reference,predictedTranscript:transcript,referenceDraft,predictedDraft:predicted}]});
   const known=Object.entries(referenceDraft.items[0].fields).filter(([,v])=>v.value!==null).map(([k])=>k);
   const knownMatches=known.filter(k=>JSON.stringify(referenceDraft.items[0].fields[k].value)===JSON.stringify(predicted.items[0].fields[k].value)).length;
   // Explicit engineering screen only; never an automatic pilot approval.
-  return {kind:input.kind,providerCalls:1,metrics:{...metrics,providerCalls:1},knownFields:known.length,knownMatches,
-    screen:metrics.codepointErrorRate<=0.05&&(input.kind==='voice'||known.length>0)&&knownMatches===known.length?'passed':'needs_review',pilotReady:false};
+  return {kind:input.kind,providerCalls:1,metrics:{...metrics,providerCalls:1},knownFields:known.length,knownMatches,fieldEvaluationAvailable:known.length>0,
+    screen:metrics.codepointErrorRate<=0.05&&known.length>0&&knownMatches===known.length?'passed':'needs_review',pilotReady:false};
 }

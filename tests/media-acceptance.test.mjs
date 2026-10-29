@@ -35,3 +35,22 @@ test('isolated cron uses main cleanup on D1-shaped SQLite and confirms R2 absenc
     await sweep(env);assert.equal(objects.size,0);
   }finally{f.close();}
 });
+
+test('matching unknown fields cannot pass either image or voice quality',async()=>{
+  for(const kind of ['image','voice']){
+    const text='synthetic natural utterance';
+    const r=await measureSample({GOOGLE_VISION_API_KEY:'test',AI:{run:async()=>({text,transcription_info:{duration:3}})}},
+      {...sample,kind,reference:text,contentType:kind==='image'?'image/png':'audio/wav'},
+      {fetcher:async()=>Response.json({responses:[{fullTextAnnotation:{text}}]})});
+    assert.equal(r.metrics.codepointErrorRate,0);assert.equal(r.knownFields,0);
+    assert.equal(r.fieldEvaluationAvailable,false);assert.equal(r.screen,'needs_review');
+  }
+});
+test('quality accepts realistic 307578-byte Vision geometry without a second call',async()=>{
+  let calls=0;
+  const body=JSON.stringify({responses:[{fullTextAnnotation:{text:ref,pages:[]}}],padding:''});
+  const padded=body.replace('"padding":""','"padding":"'+'x'.repeat(307578-Buffer.byteLength(body))+'"');
+  assert.equal(Buffer.byteLength(padded),307578);
+  const r=await measureSample({GOOGLE_VISION_API_KEY:'test'},sample,{fetcher:async()=>{calls++;return new Response(padded);}});
+  assert.equal(calls,1);assert.equal(r.screen,'passed');assert.equal(r.pilotReady,false);
+});
