@@ -30,3 +30,16 @@ Validation: retry access/races/attempt preservation, payload cleanup, bounded so
 validation and strict reference matching in tests/media-retry.test.mjs. Existing
 pipeline and owner/CSRF tests remain release gates. Live quality requires inspecting
 the private OCR text of a bounded retry, then independent reference annotations.
+
+Follow-up: known manufacturer aliases are excluded from unlabelled product names.
+The curated seed can associate literal names and ingredient/strength only when
+both occur at least twice. It does not repair spelling, fill from a manufacturer,
+or override conflicting explicit labels or another repeated product. Weak isolated
+OCR tokens are flagged as possible duplicates; all such reference-assisted drafts
+remain ambiguous and require human source verification. This is a narrow heuristic,
+not evidence of general OCR accuracy or support for every product.
+
+If a private OCR transcript already exists, the same explicit action reparses that
+text locally without a provider call, queue dispatch, expiry extension or attempt
+reset. Saved reviews still block replacement. Legacy drafts without text use one
+bounded provider retry. Tests cover both branches and payload cleanup.

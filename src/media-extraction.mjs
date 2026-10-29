@@ -1,3 +1,4 @@
+import {isKnownManufacturer,printedReferenceEvidence} from './drug-reference.mjs';
 import {DRAFT_FIELDS,validateDraft,assessCommand} from './draft-contract.mjs';
 // Bounded explicit fields and verbatim instruction excerpts, never dosage inference.
 const labels={label:'ชื่อยา',strength:'ความแรง',dose:'จำนวนต่อครั้ง',instructions:'วิธีใช้',times:'เวลา',weekdays:'วัน',startDate:'วันที่เริ่ม',endDate:'วันที่สิ้นสุด',useMode:'ลักษณะการใช้'};
@@ -27,8 +28,8 @@ export function draftFromText(text,sourceKind){
     const pairs=[];
     for(let i=0;i<lines.length;i++){
       const inline=lines[i].match(/^([A-Z][A-Za-z0-9-]{2,39}(?:[®™])?)\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|มก\.))$/u);
-      if(inline)pairs.push({label:inline[1],strength:inline[2],labelEvidence:lines[i],strengthEvidence:lines[i]});
-      if(brand.test(lines[i])){
+      if(inline&&!isKnownManufacturer(inline[1]))pairs.push({label:inline[1],strength:inline[2],labelEvidence:lines[i],strengthEvidence:lines[i]});
+      if(brand.test(lines[i])&&!isKnownManufacturer(lines[i])){
         for(const neighbor of [lines[i-1],lines[i+1]]){
           const matched=neighbor?.match(strength);
           if(matched)pairs.push({label:lines[i],strength:matched[1],labelEvidence:lines[i],strengthEvidence:neighbor,repeated:true,index:i});
@@ -38,6 +39,17 @@ export function draftFromText(text,sourceKind){
     const repeated=pairs.filter(p=>p.repeated&&new Set(pairs.filter(q=>q.label===p.label&&q.strength===p.strength).map(q=>q.index)).size>=2);
     // An ingredient-strength neighbor is evidence for strength, not a second brand.
     const accepted=[...repeated,...pairs.filter(p=>!p.repeated&&!repeated.some(q=>q.strengthEvidence===p.labelEvidence))];
+    const reference=printedReferenceEvidence(lines);
+    if(reference){
+      // A repeated exact registry name plus repeated ingredient/strength is
+      // stronger than isolated unlabelled OCR tokens. Competing repeated pairs
+      // still conflict; never override explicit labelled fields below.
+      if(!accepted.some(p=>p.repeated&&p.label.toUpperCase()!==reference.label.value.toUpperCase())){
+        if(accepted.some(p=>p.label.toUpperCase()!==reference.label.value.toUpperCase()))issues.add('possible_duplicate');
+        accepted.splice(0,accepted.length);
+      }
+      accepted.push({label:reference.label.value,strength:reference.strength.value,labelEvidence:reference.label.evidence,strengthEvidence:reference.strength.evidence});issues.add('ambiguous');
+    }
     for(const key of ['label','strength']){
       const candidates=[...new Set(accepted.map(p=>p[key]))];
       const explicit=lines.some(l=>new RegExp('^'+labels[key]+'\\s*[:：]').test(l));

@@ -22,3 +22,15 @@ test('mixed-case repeated packaging and reverse reading order retain literal evi
   // One name bordered by two strength lines is not two independent repetitions.
   assert.equal(parse('20 mg\nSamplebrand\n20 mg').fields.label.value,null);
 });
+test('public reference seed needs repeated literal name AND ingredient-strength, never Berlin',()=>{
+ const text='Bestatin 20\nSimvastatin 20 mg\nBerlin\nBestatin 20\nSimvastatin 20 mg\nBerlin';
+ const item=parse(text);assert.equal(item.fields.label.value,'Bestatin 20');assert.equal(item.fields.strength.value,'20 mg');assert.equal(item.fields.dose.value,null);
+ for(const value of ['Berlin\n20 mg\nBerlin\n20 mg','Bestatin 20\nBerlin'])assert.equal(parse(value).fields.label.value,null);
+});
+
+test('reference evidence cannot override conflicting explicit labels or another repeated product',()=>{
+ const evidence='Bestatin 20\nSimvastatin 20 mg\nBerlin\nBestatin 20\nSimvastatin 20 mg\nBerlin';
+ assert.equal(parse('ชื่อยา: A\nชื่อยา: B\n'+evidence).fields.label.value,null);
+ assert.equal(parse(evidence+'\nOTHERBRAND\nIngredient 40 mg\nOTHERBRAND\nIngredient 40 mg').fields.label.value,null);
+ assert.notEqual(parse('Bestatln 20\nSimvastatin 20 mg').fields.label.value,'Bestatin 20');
+});
