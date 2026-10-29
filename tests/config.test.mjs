@@ -32,8 +32,13 @@ test('staging releases preserve dashboard runtime without overriding delivery gu
   assert.equal(deliveryConfig({}), null);
   assert.equal(deliveryConfig({APP_ENV:'staging', DELIVERY_ENABLED:'true',
     SCHEDULER_ENABLED:'true'}), null);
-  assert.equal(config.queues, undefined);
-  assert.equal(config.ai, undefined);
+  // Bind the existing private staging resources without enabling intake/inference.
+  assert.deepEqual(config.r2_buckets, [{binding:'MEDIA_R2',bucket_name:'nong-oon-staging-media'}]);
+  assert.deepEqual(config.queues.producers, [{binding:'MEDIA_QUEUE',queue:'nong-oon-staging-media'}]);
+  assert.deepEqual(config.queues.consumers, [{queue:'nong-oon-staging-media',
+    max_batch_size:1,max_batch_timeout:5,max_retries:3,max_concurrency:1,
+    retry_delay:60,dead_letter_queue:'nong-oon-staging-media-dlq'}]);
+  assert.deepEqual(config.ai, {binding:'AI'});
 });
 
 test('only auth, API, webhook and health routes run Worker before assets', () => {
@@ -48,3 +53,4 @@ test('safe application logs persist; OAuth invocation URL logging stays disabled
   assert.equal(config.observability.logs.head_sampling_rate, 1);
   assert.equal(config.observability.traces.enabled, false);
 });
+
