@@ -18,6 +18,33 @@ export function draftFromText(text,sourceKind){
     const candidate={...fields,[key]:{value,evidence:line}},draft={schemaVersion:1,sourceKind,items:[{fields:candidate,issues:[]}]};
     if(validateDraft(draft).ok)fields[key]=candidate[key];else issues.add('ambiguous');
   }
+  // Printed packaging only: literal brand + strength on the same line, or a
+  // repeated uppercase brand directly beside a strength/ingredient line. No
+  // medicine dictionary, spelling repair, patient-name or regimen inference.
+  if(sourceKind==='printed_label'){
+    const brand=/^[A-Z][A-Z0-9-]{2,39}(?:[®™])?$/u;
+    const strength=/^(?:[A-Za-z][A-Za-z -]{1,60}\s+)?(\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|มก\.))$/iu;
+    const pairs=[];
+    for(let i=0;i<lines.length;i++){
+      const inline=lines[i].match(/^([A-Z][A-Z0-9-]{2,39}(?:[®™])?)\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|มก\.))$/u);
+      if(inline)pairs.push({label:inline[1],strength:inline[2],labelEvidence:lines[i],strengthEvidence:lines[i]});
+      if(brand.test(lines[i])){
+        const next=lines[i+1]?.match(strength);
+        if(next)pairs.push({label:lines[i],strength:next[1],labelEvidence:lines[i],strengthEvidence:lines[i+1],repeated:true});
+      }
+    }
+    const accepted=pairs.filter(p=>!p.repeated||pairs.filter(q=>q.label===p.label&&q.strength===p.strength).length>=2);
+    for(const key of ['label','strength']){
+      const candidates=[...new Set(accepted.map(p=>p[key]))];
+      const explicit=lines.some(l=>new RegExp('^'+labels[key]+'\\s*[:：]').test(l));
+      if(candidates.length>1||(fields[key].value!==null&&candidates.length===1&&fields[key].value!==candidates[0])){
+        fields[key]={value:null,evidence:null};issues.add('conflicting');
+      }else if(!explicit&&candidates.length===1){
+        const p=accepted.find(p=>p[key]===candidates[0]);
+        fields[key]={value:p[key],evidence:p[key+'Evidence']};
+      }
+    }
+  }
   // Preserve one explicit natural instruction line for human review. Do not split
   // it into doses, frequencies or clock times; patient names are not drug labels.
   const instructionLines=lines.filter(line=>/^(?:รับประทาน|ใช้ภายนอก)(?:\s|ครั้งละ|วันละ|ก่อน|หลัง|เฉพาะ)/u.test(line));
