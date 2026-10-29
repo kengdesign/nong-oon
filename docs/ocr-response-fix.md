@@ -33,3 +33,9 @@ Acceptance now requires a private `<kind>.reference.json` sidecar with `scope` (
 Offline analysis needs a private JSON file with `sourceKind`, `reference`, `predictedTranscript`, and `review` (the sidecar object above). Run `node scripts/media-assess-offline.mjs acceptance-media/private/offline-case.json`. It performs zero provider calls, writes no transcript and prints only aggregate results. The earlier aggregate receipt does not contain the OCR transcript, so it cannot reconstruct or rescore that run. Do not rerun OCR simply to manufacture a passing result. Private images, transcripts, human gold and identities must never be committed. Public regressions use invented text only.
 
 The narrow labelled-line extractor is still a limitation for natural hospital labels or speech. This change makes that limitation visible; it does not claim to solve natural-language extraction or authorize automatic medication scheduling.
+
+## Conservative label excerpts (29 October follow-up)
+
+Explicit labels accept whitespace before ASCII/full-width colons. Duplicate labels remain conflicts regardless of spacing. A single line beginning with an explicit Thai administration verb can be preserved verbatim as an instruction excerpt for human review. Multiple directions or disagreement with a labelled instruction leave instructions unknown and mark a conflict. This is not a complete multiline interpretation.
+
+No natural-language dose, frequency, bedtime clock, weekday, start date or medication identity is inferred. Patient-name lines are not drug names; PRN still clears clock times. All missing fields and source verification/confirmation gates remain. Validation: npm run check, 197/197 offline tests, 26/26 synthetic contract fixtures on Node 24.22.1; zero provider calls. Real-sample quality and staging acceptance remain unverified.
