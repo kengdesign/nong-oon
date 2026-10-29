@@ -1,7 +1,7 @@
 import {json} from './http.mjs';
 import {MEDIA_CONSENT_VERSION} from './media-policy.mjs';
 import {MediaError,PROVIDERS,all,stmt,checked,requireMediaOwner,grantMediaConsent,reject,liveJobSQL} from './media-store.mjs';
-import {readMediaJob,saveMediaReview,confirmMediaReview} from './media-review.mjs';
+import {readMediaJob,saveMediaReview,confirmMediaReview,cancelMediaJob} from './media-review.mjs';
 async function body(request){
   const text=await request.text();if(new TextEncoder().encode(text).length>16_384)reject('BODY_TOO_LARGE',413);
   try{const value=JSON.parse(text);if(!value||typeof value!=='object'||Array.isArray(value))throw Error();return value;}
@@ -38,6 +38,7 @@ export async function handleMediaApi(request,env,{actorId,now=Date.now()}={}){
     const j=/^jobs\/([A-Za-z0-9_-]{1,128})(?:\/(source|reviews\/(\d+)(\/confirm)?))?$/.exec(tail);
     if(j){
       const jobId=j[1],context={jobId,patientId,actorId,now,providerId:env.MEDIA_PROVIDER_ID};
+      if(!j[2]&&method==='DELETE')return json(200,await cancelMediaJob(env.DB,context));
       if(!j[2]&&method==='GET'){
         const view=await readMediaJob(env.DB,context);
         return json(200,{jobId,sourceKind:view.row.source_kind,draft:view.draft,currentVersion:view.currentVersion,expiresAt:view.row.expires_at,

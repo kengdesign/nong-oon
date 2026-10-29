@@ -34,6 +34,16 @@ async function ui({authenticated=true,consented=true}={}){
   return {root,feedback,calls,get saved(){return saved;}};
 }
 const find=(root,tag,text)=>root.querySelectorAll(tag).find(e=>e.textContent===text);
+test('cancellation needs a separate explicit action and includes the session CSRF token',async()=>{
+  const f=await ui();
+  await find(f.root,'button','ยกเลิกร่างนี้').events.click();await tick();
+  assert.equal(f.calls.filter(c=>c.method==='DELETE').length,0);
+  await find(f.root,'button','ยืนยันยกเลิกร่าง').events.click();await tick();
+  const calls=f.calls.filter(c=>c.method==='DELETE');assert.equal(calls.length,1);
+  assert.equal(calls[0].path,'/api/media/patients/patient/jobs/job');
+  assert.equal(calls[0].headers['x-csrf-token'],'synthetic-csrf');
+  assert.match(f.feedback.textContent,/ยกเลิกร่างแล้ว/);
+});
 test('UI unauthenticated and missing-consent states never fetch media or write automatically',async()=>{
   for(const settings of [{authenticated:false},{consented:false}]){
     const f=await ui(settings);assert.equal(f.calls.some(c=>c.method!=='GET'),false);assert.equal(f.calls.some(c=>c.path.endsWith('/jobs')),false);

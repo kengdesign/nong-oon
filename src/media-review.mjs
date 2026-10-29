@@ -7,6 +7,22 @@ const revision=v=>Number.isSafeInteger(v)&&v>=0&&v<Number.MAX_SAFE_INTEGER;
 const index=v=>Number.isInteger(v)&&v>=0&&v<20;
 const short=v=>typeof v==='string'&&v.length>0&&v.length<=120&&v.trim()===v&&!/[\u0000-\u001f\u007f]/.test(v);
 
+export async function cancelMediaJob(db,{jobId,patientId,actorId,now}){
+  if(!mediaId(jobId)||!mediaNow(now))reject('INVALID_MEDIA_INPUT');
+  await requireMediaOwner(db,patientId,actorId);
+  // Keep lease and object manifest: an in-flight put must still be swept after
+  // its lease expires. Confirmed schedules and replay receipts are untouched.
+  const guard=`id=? AND patient_id=? AND actor_id=? AND ${ownerSQL}`;
+  const args=[jobId,patientId,actorId,...ownerArgs(patientId,actorId)];
+  const result=await batch(db,[
+    stmt(db,`UPDATE media_jobs SET state='cancelled',draft_json=NULL,message_id=NULL,last_code='USER_CANCELLED',updated_at=?
+      WHERE ${guard} AND state IN ('queued','processing','awaiting_review','cancelled') RETURNING id`,[now,...args]),
+    stmt(db,`DELETE FROM media_reviews WHERE job_id IN (SELECT id FROM media_jobs WHERE ${guard} AND state='cancelled')`,args),
+  ]);
+  if(result[0].results?.length!==1)reject('MEDIA_DRAFT_UNAVAILABLE',404);
+  return {cancelled:true,cleanupPending:true};
+}
+
 export async function readMediaJob(db,{jobId,patientId,actorId,now,providerId}){
   if(!mediaId(jobId)||!mediaNow(now))reject('INVALID_MEDIA_INPUT');
   const currentVersion=await requireMediaOwner(db,patientId,actorId);

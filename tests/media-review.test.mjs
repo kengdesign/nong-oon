@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {mediaFixture,mediaEvent,unsendEvent,owner,other,extraction} from './helpers/media.mjs';
-import {ingestMediaEvents} from '../src/media-store.mjs';
-import {saveMediaReview,confirmMediaReview,readMediaJob} from '../src/media-review.mjs';
+import {ingestMediaEvents,cleanupMedia,MEDIA_LEASE_MS} from '../src/media-store.mjs';
+import {saveMediaReview,confirmMediaReview,readMediaJob,cancelMediaJob} from '../src/media-review.mjs';
 import {handleRequest} from '../src/webhook.mjs';
 const origin='https://staging.nongoon.com';
 const input=()=>({expectedReviewVersion:0,expectedScheduleVersion:1,sourceChecked:true,issuesResolved:true,useMode:'scheduled',
@@ -14,6 +14,38 @@ async function ready(){const f=await mediaFixture();await ingestMediaEvents(f.db
   f.sql.prepare("UPDATE media_jobs SET state='awaiting_review',draft_json=?,content_type='image/png' WHERE id=?").run(extraction(),id);
   return {...f,context:{jobId:id,patientId:f.patientId,actorId:owner,providerId:f.env.MEDIA_PROVIDER_ID,now:f.now,itemIndex:0}};}
 const confirmation=(r)=>({confirmationId:crypto.randomUUID(),expectedReviewVersion:r.reviewVersion,expectedScheduleVersion:r.expectedScheduleVersion,acknowledge:true});
+
+test('owner cancellation blocks confirmation, clears reviews and remains idempotent without enabling schedules',async()=>{
+  const f=await ready();try{
+    const review=await saveMediaReview(f.db,{...f.context,input:input()});
+    await assert.rejects(cancelMediaJob(f.db,{...f.context,actorId:other}));
+    assert.equal((await cancelMediaJob(f.db,f.context)).cleanupPending,true);
+    assert.equal((await cancelMediaJob(f.db,f.context)).cancelled,true);
+    assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM media_reviews').get().n,0);
+    assert.equal(f.sql.prepare('SELECT draft_json FROM media_jobs').get().draft_json,null);
+    await assert.rejects(confirmMediaReview(f.db,{...f.context,input:confirmation(review)}));
+    assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM medication_schedules').get().n,0);
+  }finally{f.close();}
+});
+test('cancellation preserves in-flight lease and catches late objects after lease expiry',async()=>{
+  const f=await ready();try{
+    const key=f.sql.prepare('SELECT object_key FROM media_jobs').get().object_key;
+    f.sql.prepare("UPDATE media_jobs SET state='processing',lease_until=?").run(f.now+MEDIA_LEASE_MS);
+    await cancelMediaJob(f.db,f.context);
+    f.objects.set(key,{bytes:new Uint8Array([1])});
+    await cleanupMedia(f.env,f.now+1);assert.equal(f.objects.size,1);
+    await cleanupMedia(f.env,f.now+MEDIA_LEASE_MS+1);assert.equal(f.objects.size,0);
+  }finally{f.close();}
+});
+test('cancellation cannot remove a confirmed schedule or its replay receipt',async()=>{
+  const f=await ready();try{
+    const review=await saveMediaReview(f.db,{...f.context,input:input()}),c=confirmation(review);
+    await confirmMediaReview(f.db,{...f.context,input:c});
+    await assert.rejects(cancelMediaJob(f.db,f.context));
+    assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM medication_schedules').get().n,1);
+    assert.equal((await confirmMediaReview(f.db,{...f.context,input:c})).replayed,true);
+  }finally{f.close();}
+});
 
 test('review alone never creates a schedule; explicit confirm atomically writes schedule, audit and replay receipt',async()=>{
   const f=await ready();try{
@@ -43,8 +75,8 @@ test('edits, expiration, invalid calendars, PRN and cross-account review require
     assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM medication_schedules').get().n,0);
   }finally{f.close();}
 });
-test('a permission/unsend/review-version/schedule change immediately before atomic write prevents confirmation',async()=>{
-  for(const mode of ['withdraw','unsend','review','schedule']){
+test('a permission/unsend/review-version/schedule/cancellation change immediately before atomic write prevents confirmation',async()=>{
+  for(const mode of ['withdraw','unsend','review','schedule','cancel']){
     const f=await ready();try{
       const r=await saveMediaReview(f.db,{...f.context,input:input()});const original=f.db.batch;
       f.db.batch=async statements=>{
@@ -53,6 +85,7 @@ test('a permission/unsend/review-version/schedule change immediately before atom
         if(mode==='unsend')await ingestMediaEvents(f.db,[unsendEvent()],{now:f.now,providerId:f.env.MEDIA_PROVIDER_ID});
         if(mode==='review')f.sql.prepare('UPDATE media_reviews SET version=version+1').run();
         if(mode==='schedule')f.sql.prepare('UPDATE care_schedules SET current_version=current_version+1').run();
+        if(mode==='cancel')await cancelMediaJob(f.db,f.context);
         return original(statements);
       };
       await assert.rejects(confirmMediaReview(f.db,{...f.context,input:confirmation(r)}));
@@ -100,6 +133,7 @@ test('actual Worker routes enforce session/CSRF/body limits, default-off switch 
     const path=`jobs/${f.context.jobId}`;
     assert.equal((await call(path)).status,200);
     assert.equal((await call(path+'/reviews/0','PUT',input(),{'x-csrf-token':''})).status,403);
+    assert.equal((await call(path,'DELETE',undefined,{'x-csrf-token':''})).status,403);
     assert.equal((await call(path+'/reviews/0','PUT',input(),{origin:'https://attacker.invalid'})).status,403);
     assert.equal((await call(path+'/reviews/0','PUT',{junk:'x'.repeat(17000)})).status,413);
     assert.equal((await call(path,'GET',undefined,{cookie:''})).status,401);
