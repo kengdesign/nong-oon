@@ -19,21 +19,25 @@ export function draftFromText(text,sourceKind){
     if(validateDraft(draft).ok)fields[key]=candidate[key];else issues.add('ambiguous');
   }
   // Printed packaging only: literal brand + strength on the same line, or a
-  // repeated uppercase brand directly beside a strength/ingredient line. No
+  // repeated printed brand directly beside a strength/ingredient line. No
   // medicine dictionary, spelling repair, patient-name or regimen inference.
   if(sourceKind==='printed_label'){
-    const brand=/^[A-Z][A-Z0-9-]{2,39}(?:[®™])?$/u;
+    const brand=/^[A-Z][A-Za-z0-9-]{2,39}(?:\s+\d{1,4})?(?:[®™])?$/u;
     const strength=/^(?:[A-Za-z][A-Za-z -]{1,60}\s+)?(\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|มก\.))$/iu;
     const pairs=[];
     for(let i=0;i<lines.length;i++){
-      const inline=lines[i].match(/^([A-Z][A-Z0-9-]{2,39}(?:[®™])?)\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|มก\.))$/u);
+      const inline=lines[i].match(/^([A-Z][A-Za-z0-9-]{2,39}(?:[®™])?)\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|มก\.))$/u);
       if(inline)pairs.push({label:inline[1],strength:inline[2],labelEvidence:lines[i],strengthEvidence:lines[i]});
       if(brand.test(lines[i])){
-        const next=lines[i+1]?.match(strength);
-        if(next)pairs.push({label:lines[i],strength:next[1],labelEvidence:lines[i],strengthEvidence:lines[i+1],repeated:true});
+        for(const neighbor of [lines[i-1],lines[i+1]]){
+          const matched=neighbor?.match(strength);
+          if(matched)pairs.push({label:lines[i],strength:matched[1],labelEvidence:lines[i],strengthEvidence:neighbor,repeated:true,index:i});
+        }
       }
     }
-    const accepted=pairs.filter(p=>!p.repeated||pairs.filter(q=>q.label===p.label&&q.strength===p.strength).length>=2);
+    const repeated=pairs.filter(p=>p.repeated&&new Set(pairs.filter(q=>q.label===p.label&&q.strength===p.strength).map(q=>q.index)).size>=2);
+    // An ingredient-strength neighbor is evidence for strength, not a second brand.
+    const accepted=[...repeated,...pairs.filter(p=>!p.repeated&&!repeated.some(q=>q.strengthEvidence===p.labelEvidence))];
     for(const key of ['label','strength']){
       const candidates=[...new Set(accepted.map(p=>p[key]))];
       const explicit=lines.some(l=>new RegExp('^'+labels[key]+'\\s*[:：]').test(l));
