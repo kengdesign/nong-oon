@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createMediaInfer,providerReady} from '../src/media-providers.mjs';
+import {createMediaInfer,providerReady,MAX_VISION_RESPONSE_BYTES} from '../src/media-providers.mjs';
 import {draftFromText,recognizeVoiceCommand} from '../src/media-extraction.mjs';
 import {parseDraft} from '../src/draft-contract.mjs';
 import {mediaFixture,mediaEvent,png} from './helpers/media.mjs';
@@ -54,4 +54,16 @@ test('default queue pipeline invokes configured OCR and produces only an inactiv
   const id=f.sql.prepare('SELECT id FROM media_jobs').get().id;
   const r=await processMediaJob(f.env,id,{clock:()=>f.now,fetcher:async(url)=>url.startsWith('https://api-data.line.me/')?new Response(png(),{headers:{'content-type':'image/png'}}):Response.json({responses:[{fullTextAnnotation:{text:'ชื่อยา: SAMPLE'}}]})});
   assert.equal(r.outcome,'awaiting_review');assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM medication_schedules').get().n,0);f.close();
+});
+
+test('Vision response bound accepts exact limit and cancels oversized streams',async()=>{
+  const text='ชื่อยา: SAMPLE';
+  const body=JSON.stringify({responses:[{fullTextAnnotation:{text}}],padding:''});
+  const exact=body.replace('"padding":""','"padding":"'+'x'.repeat(MAX_VISION_RESPONSE_BYTES-Buffer.byteLength(body))+'"');
+  assert.equal(Buffer.byteLength(exact),MAX_VISION_RESPONSE_BYTES);
+  assert.equal(parseDraft(await createMediaInfer(env,{fetcher:async()=>new Response(exact)})(input)).ok,true);
+  let cancelled=false,observed=false;
+  const stream=new ReadableStream({pull(c){c.enqueue(new Uint8Array(65536));},cancel(){cancelled=true;}});
+  await assert.rejects(createMediaInfer(env,{fetcher:async()=>new Response(stream),onTranscript(){observed=true;}})(input),/MEDIA_PROVIDER_OUTPUT_REJECTED/);
+  assert.equal(cancelled,true);assert.equal(observed,false);
 });

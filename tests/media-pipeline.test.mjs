@@ -5,6 +5,21 @@ import {ingestMediaEvents,dispatchMediaJobs,claimMediaJob,cleanupMedia,grantMedi
 import {processMediaJob,readLineMedia,recoverMedia,handleMediaQueue} from '../src/media-pipeline.mjs';
 const ingest=f=>ingestMediaEvents(f.db,[mediaEvent(f.now)],{now:f.now,providerId:f.env.MEDIA_PROVIDER_ID});
 
+test('one failed erase does not block other objects and errors stay redacted',async()=>{
+  const f=await mediaFixture();try{
+    await ingestMediaEvents(f.db,[mediaEvent(f.now,'123'),mediaEvent(f.now,'124')],{now:f.now,providerId:f.env.MEDIA_PROVIDER_ID});
+    const rows=f.sql.prepare('SELECT * FROM media_jobs ORDER BY id').all();
+    assert.equal(rows.length,2);
+    for(const row of rows)f.objects.set(row.object_key,{bytes:png()});
+    f.sql.exec("UPDATE media_jobs SET state='cancelled'");
+    const env={...f.env,MEDIA_R2:{async delete(key){if(key===rows[0].object_key)throw Error('private provider failure');f.objects.delete(key);}}};
+    await assert.rejects(cleanupMedia(env,f.now),e=>e.code==='MEDIA_CLEANUP_INCOMPLETE'&&e.status===503&&!e.message.includes('private'));
+    assert.equal(f.objects.size,1);
+    assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM media_jobs').get().n,2);
+    await cleanupMedia(f.env,f.now+1);assert.equal(f.objects.size,0);
+  }finally{f.close();}
+});
+
 test('durable intake deduplicates events and recovery sends queue IDs only after committed SQL',async()=>{
   const f=await mediaFixture();try{
     await ingest(f);await ingest(f);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM media_jobs').get().n,1);

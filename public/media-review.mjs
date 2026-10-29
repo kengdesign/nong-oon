@@ -36,7 +36,13 @@ async function render(){session=await api('/api/session');if(!session.authentica
   const {jobs}=await api(base()+'/jobs');root.append(button('โหลดรายการล่าสุด',render));
   if(!jobs.length)root.append(node('p','ยังไม่มีร่าง ส่งภาพฉลากหรือเสียงผ่านห้องแชทน้องอุ่นเมื่อบริการเปิดรับแล้ว'));
   for(const job of jobs){const state={queued:'รับงานแล้ว',processing:'กำลังอ่าน',awaiting_review:'รอคุณตรวจ',confirmed:'บันทึกแล้ว',failed:'อ่านไม่สำเร็จ',cancelled:'ยกเลิกแล้ว',expired:'หมดอายุ'}[job.state]??'กำลังตรวจ';
-    root.append(card(job.sourceKind==='voice'?'ร่างจากเสียง':'ร่างจากภาพ',node('p',state),...(job.state==='awaiting_review'?[button('เปิดตรวจร่าง',()=>openJob(job.id))]:[])));}
+    root.append(card(job.sourceKind==='voice'?'ร่างจากเสียง':'ร่างจากภาพ',node('p',state),...(job.state==='awaiting_review'?[button('เปิดตรวจร่าง',()=>openJob(job.id))]:[]),
+      ...(['queued','processing','awaiting_review'].includes(job.state)?[button('ยกเลิกร่างนี้',()=>cancelJob(job.id))]:[])));}
+}
+function cancelJob(id){
+  const section=card('ยกเลิกร่างนี้หรือไม่',node('p','ระบบจะหยุดใช้ร่างและเข้าคิวลบต้นฉบับ การลบจริงอาจล่าช้า ตารางที่เคยยืนยันแล้วจะยังอยู่'),
+    button('กลับรายการ',render),button('ยืนยันยกเลิกร่าง',async()=>{await api(base()+`/jobs/${encodeURIComponent(id)}`,'DELETE');await render();feedback.textContent='ยกเลิกร่างแล้ว และเข้าคิวลบต้นฉบับ';}));
+  root.replaceChildren(section);
 }
 async function openJob(id){const path=base()+`/jobs/${encodeURIComponent(id)}`,view=await api(path);const container=card('ตรวจเทียบกับต้นฉบับ',button('กลับรายการ',render));root.replaceChildren(container);
   container.append(node(view.sourceKind==='voice'?'audio':'img',null,view.sourceKind==='voice'?{src:path+'/source',controls:'',preload:'none'}:{src:path+'/source',alt:'ภาพต้นฉบับสำหรับตรวจข้อมูล'}));

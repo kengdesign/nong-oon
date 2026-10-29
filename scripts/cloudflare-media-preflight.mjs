@@ -11,7 +11,9 @@ export async function mediaPreflight({token,accountId,worker,bucket,queue,fetche
   const settings=await request(`workers/scripts/${worker}/settings`);
   const bindings=settings.ok&&Array.isArray(settings.result?.bindings)?settings.result.bindings:[];
   const expected=['DB','MEDIA_R2','MEDIA_QUEUE','AI','GOOGLE_VISION_API_KEY'];
-  const found=Object.fromEntries(expected.map(name=>[name,bindings.some(b=>b.name===name)]));
+  const types={DB:'d1',MEDIA_R2:'r2_bucket',MEDIA_QUEUE:'queue',AI:'ai',GOOGLE_VISION_API_KEY:'secret_text'};
+  const found=Object.fromEntries(expected.map(name=>[name,bindings.some(b=>b.name===name&&b.type===types[name])]));
+  const deliveryClosed=['DELIVERY_ENABLED','INGESTION_ENABLED'].every(name=>bindings.some(b=>b.name===name&&b.type==='plain_text'&&b.text==='false'));
   const switches=Object.fromEntries(['APP_ENV','MEDIA_API_ENABLED','MEDIA_PROCESSING_ENABLED','MEDIA_PROVIDER_ENABLED'].map(name=>{
     const b=bindings.find(v=>v.name===name&&v.type==='plain_text');
     return [name,name==='APP_ENV'?b?.text==='staging':b?.text==='true'];
@@ -20,9 +22,9 @@ export async function mediaPreflight({token,accountId,worker,bucket,queue,fetche
   const listed=q.ok&&Array.isArray(q.result)?q.result:[];
   const queueFound=listed.some(v=>v.queue_name===queue);
   return {readOnly:true,checkedAt:new Date().toISOString(),settingsReadable:settings.ok,settingsStatus:settings.ok?200:settings.status,
-    bindings:found,gates:switches,bucketReadable:r2.ok,bucketStatus:r2.ok?200:r2.status,queueListed:queueFound,
+    bindings:found,gates:switches,deliveryClosed,bucketReadable:r2.ok,bucketStatus:r2.ok?200:r2.status,queueListed:queueFound,
     queueListStatus:q.ok?200:q.status,queueListLimitedToFirst100:true,
-    readyForDrill:settings.ok&&Object.values(found).every(Boolean)&&r2.ok&&queueFound,
+    readyForDrill:settings.ok&&switches.APP_ENV&&deliveryClosed&&Object.values(found).every(Boolean)&&r2.ok&&queueFound,
     limitations:['Does not send queue messages or write/delete R2 objects','Does not prove binding resource targets, migration state, provider access, consumer delivery or purge','readyForDrill is not pilot or release approval']};
 }
 if(process.argv[1]?.endsWith('cloudflare-media-preflight.mjs')){

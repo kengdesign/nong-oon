@@ -57,5 +57,33 @@
       ]
     }
   ],
-  "keep_vars": true
+  "keep_vars": true,
+  "r2_buckets": [
+    {
+      "binding": "MEDIA_R2",
+      "bucket_name": "nong-oon-staging-media"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "MEDIA_QUEUE",
+        "queue": "nong-oon-staging-media"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "nong-oon-staging-media",
+        "max_batch_size": 1,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "max_concurrency": 1,
+        "retry_delay": 60,
+        "dead_letter_queue": "nong-oon-staging-media-dlq"
+      }
+    ]
+  },
+  "ai": {
+    "binding": "AI"
+  }
 }
