@@ -44,3 +44,14 @@ PR 28 pins checkout v7.0.1 and setup-node v7.1.0 (Node 24 actions), uses
 Ubuntu 26.04 with Node 22/24, and disables unnecessary credential/cache persistence.
 Run 40632153500 passed both jobs for the workflow update. The media changes require
 their own CI result; no main-branch merge or deploy is implied.
+
+## Verified progress — 29 October 2026
+
+These P2 identifiers are engineering work packages, not a replacement for the twelve product features agreed with the owner. Do not label all product features complete based on this ledger.
+
+- PR 28 and 29 remain stacked drafts; PR 30 includes bounded Vision response handling, independent human-reviewed reference scope/gold, conservative instruction excerpts, and cleanup continuing after an individual R2 failure. Local tests reached 198/198 before the preflight follow-up. No paid inference quality pass or release is implied.
+- Owner-authorized local Chrome inspection confirmed staging deployment 6fd7e876, five resource bindings including private media R2/Queue, migration 0009, media API/processing/provider and delivery/ingestion disabled, and existing two cron triggers. This was read-only, not a deployment.
+- Read-only D1 aggregates for the completed owner-only pilot window confirmed six expected dose records, six distinct attempted doses, one recipient, six sent/ACCEPTED rows, six total attempts, no retried jobs and no attempt recorded after the stop. API acceptance is not handset receipt. No media jobs or media reviews existed; an empty table cannot establish physical cleanup.
+- The API preflight now requires correct binding types, explicit staging environment, and both delivery and ingestion explicitly false before drill readiness. Missing or unknown guards cannot pass. Resource-target/migration/provider/purge checks still require separate evidence.
+- Remaining release gates: representative synthetic Thai image/audio measurements with independently reviewed gold; review UI staging acceptance; metadata retention period and actual main staging cleanup acceptance; review and combine stacked PRs; bounded Phase 2 rollout. No current user login or manual command is required for development.
+- Product work still needs item-by-item acceptance: voice responses/commands, family and caregiver access, conflict/double-dose guards, snooze/skip reasons, multi-profile flows, export/print, travel/holiday shifts, and operational quality/cost metrics. Existing modules and offline tests are foundations, not proof of complete live workflows.
