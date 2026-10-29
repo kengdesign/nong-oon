@@ -34,7 +34,7 @@ export async function handleMediaApi(request,env,{actorId,now=Date.now()}={}){
     }
     if(tail==='jobs'&&method==='GET'){
       const jobs=await all(env.DB,`SELECT id,source_kind AS sourceKind,state,created_at AS createdAt,expires_at AS expiresAt FROM media_jobs
-        WHERE patient_id=? AND actor_id=? AND expires_at>? AND provider_id=? AND ${liveJobSQL,dispatchMediaJobs} ORDER BY created_at DESC LIMIT 20`,[patientId,actorId,now,env.MEDIA_PROVIDER_ID,now]);
+        WHERE patient_id=? AND actor_id=? AND expires_at>? AND provider_id=? AND ${liveJobSQL} ORDER BY created_at DESC LIMIT 20`,[patientId,actorId,now,env.MEDIA_PROVIDER_ID,now]);
       return json(200,{jobs,currentVersion});
     }
     const j=/^jobs\/([A-Za-z0-9_-]{1,128})(?:\/(source|retry|reviews\/(\d+)(\/confirm)?))?$/.exec(tail);
