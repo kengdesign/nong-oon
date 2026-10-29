@@ -1,6 +1,7 @@
 // Same-origin authenticated review only; no localStorage, third-party URLs or AI calls.
 const root=document.querySelector('#media-view'),feedback=document.querySelector('#media-feedback');
-let session,patientId,busy=false;
+let session,patientId,busy=false,refreshTimer=null,refreshCount=0;
+function stopRefresh(){if(refreshTimer!==null){clearTimeout(refreshTimer);refreshTimer=null;}}
 const words={label:'ชื่อรายการตามฉลาก',strength:'ความแรงตามฉลาก',dose:'จำนวนต่อครั้งตามฉลาก',instructions:'วิธีใช้และคำแนะนำ',
   times:'เวลาแจ้งเตือน (เช่น 08:00,18:00)',weekdays:'วันในสัปดาห์',startDate:'วันที่เริ่ม',endDate:'วันที่สิ้นสุด (เว้นว่างได้)',useMode:'ลักษณะการใช้'};
 const errors={MEDIA_DISABLED:'ฟีเจอร์ภาพและเสียงยังไม่เปิดใช้งาน',MEDIA_PROVIDER_NOT_CONFIGURED:'กำลังเตรียมบริการอ่านภาพและเสียง',
@@ -21,7 +22,7 @@ async function task(action){if(busy)return;busy=true;root.setAttribute('aria-bus
 function field(form,key,value){const label=node('label',words[key]),input=node(key==='instructions'?'textarea':'input',null,{name:key,...(key==='instructions'?{}:{type:['startDate','endDate'].includes(key)?'date':'text'}),...(key==='endDate'?{}:{required:''})});
   input.value=Array.isArray(value)?value.join(','):value??'';if(value===null&&!['startDate','endDate'].includes(key))input.setAttribute('placeholder','ไม่พบในภาพ — กรอกจากข้อมูลที่คุณตรวจสอบแล้ว');if(!['times','weekdays','startDate','endDate'].includes(key))input.maxLength=key==='instructions'?240:120;
   label.append(input);form.append(label);return input;}
-async function render(){session=await api('/api/session');if(!session.authenticated){root.replaceChildren(card('เข้าใช้ก่อนตรวจร่าง',node('a','เข้าใช้ผ่าน LINE',{href:'/auth/login'})));return;}
+async function render({automatic=false}={}){stopRefresh();if(!automatic)refreshCount=0;session=await api('/api/session');if(!session.authenticated){root.replaceChildren(card('เข้าใช้ก่อนตรวจร่าง',node('a','เข้าใช้ผ่าน LINE',{href:'/auth/login'})));return;}
   const data=await api('/api/patients');const own=data.patients.filter(p=>p.role==='owner');
   if(!own.length){root.replaceChildren(card('ยังไม่มีพื้นที่ดูแล',node('a','กลับไปสร้างพื้นที่ดูแล',{href:'/'})));return;}
   if(!own.some(p=>p.id===patientId))patientId=own[0].id;
@@ -35,16 +36,20 @@ async function render(){session=await api('/api/session');if(!session.authentica
   if(!consent.consented)return;
   const {jobs}=await api(base()+'/jobs');root.append(button('โหลดรายการล่าสุด',render));
   if(!jobs.length)root.append(node('p','ยังไม่มีร่าง ส่งภาพฉลากหรือเสียงผ่านห้องแชทน้องอุ่นเมื่อบริการเปิดรับแล้ว'));
-  for(const job of jobs){const state={queued:'รับงานแล้ว',processing:'กำลังอ่าน',awaiting_review:'รอคุณตรวจ',confirmed:'บันทึกแล้ว',failed:'อ่านไม่สำเร็จ',cancelled:'ยกเลิกแล้ว',expired:'หมดอายุ'}[job.state]??'กำลังตรวจ';
+  for(const job of jobs){const state={queued:'รับงานแล้ว รออ่านข้อมูล',processing:'กำลังอ่าน',awaiting_review:'รอคุณตรวจ',confirmed:'บันทึกแล้ว',failed:'อ่านไม่สำเร็จ',cancelled:'ยกเลิกแล้ว',expired:'หมดอายุ'}[job.state]??'กำลังตรวจ';
     root.append(card(job.sourceKind==='voice'?'ร่างจากเสียง':'ร่างจากภาพ',node('p',state),...(job.state==='awaiting_review'?[button('เปิดตรวจร่าง',()=>openJob(job.id))]:[]),
       ...(['queued','processing','awaiting_review'].includes(job.state)?[button('ยกเลิกร่างนี้',()=>cancelJob(job.id))]:[])));}
+  if(jobs.some(job=>['queued','processing'].includes(job.state))){
+    root.append(node('p',refreshCount<24?'กำลังรออ่านข้อมูล หน้านี้ตรวจสถานะให้ทุก 15 วินาที คุณไม่ต้องส่งภาพซ้ำ':'ยังรอประมวลผล กดโหลดรายการล่าสุดเพื่อตรวจอีกครั้ง ไม่ต้องส่งภาพซ้ำ'));
+    if(refreshCount<24){refreshCount++;refreshTimer=setTimeout(()=>task(()=>render({automatic:true})),15000);}
+  }
 }
-function cancelJob(id){
+function cancelJob(id){stopRefresh();
   const section=card('ยกเลิกร่างนี้หรือไม่',node('p','ระบบจะหยุดใช้ร่างและเข้าคิวลบต้นฉบับ การลบจริงอาจล่าช้า ตารางที่เคยยืนยันแล้วจะยังอยู่'),
     button('กลับรายการ',render),button('ยืนยันยกเลิกร่าง',async()=>{await api(base()+`/jobs/${encodeURIComponent(id)}`,'DELETE');await render();feedback.textContent='ยกเลิกร่างแล้ว และเข้าคิวลบต้นฉบับ';}));
   root.replaceChildren(section);
 }
-async function openJob(id){const path=base()+`/jobs/${encodeURIComponent(id)}`,view=await api(path);const container=card('ตรวจเทียบกับต้นฉบับ',button('กลับรายการ',render));root.replaceChildren(container);
+async function openJob(id){stopRefresh();const path=base()+`/jobs/${encodeURIComponent(id)}`,view=await api(path);const container=card('ตรวจเทียบกับต้นฉบับ',button('กลับรายการ',render));root.replaceChildren(container);
   container.append(node(view.sourceKind==='voice'?'audio':'img',null,view.sourceKind==='voice'?{src:path+'/source',controls:'',preload:'none'}:{src:path+'/source',alt:'ภาพต้นฉบับสำหรับตรวจข้อมูล'}));
   view.draft.items.forEach((item,i)=>{const existing=view.reviews.find(r=>r.itemIndex===i);if(existing?.confirmed){container.append(card(`รายการ ${i+1}`,node('p','บันทึกแล้ว')));return;}
     const section=card(`รายการ ${i+1}`);container.append(section);

@@ -8,7 +8,7 @@ import { secure, boundedRequest } from './http.mjs';
 import { handleAdminApi } from './admin-api.mjs';
 import { deliveryWindowOpen } from './delivery.mjs';
 import { handleMediaApi } from './media-api.mjs';
-import { ingestMediaEvents } from './media-store.mjs';
+import { ingestMediaEvents, dispatchMediaJobs } from './media-store.mjs';
 import { recoverMedia, handleMediaQueue } from './media-pipeline.mjs';
 export { PatientClock } from './patient-clock.mjs';
 export const MAX_WEBHOOK_BYTES = 64 * 1024;
@@ -124,6 +124,11 @@ async function route(request, env = {}, context = {}) {
   if (env.MEDIA_API_ENABLED === 'true' && env.APP_ENV === 'staging') {
     try { await ingestMediaEvents(env.DB, payload.events, {now:Date.now(),providerId:env.MEDIA_PROVIDER_ID}); }
     catch { return json(503, {error:'MEDIA_INTAKE_UNAVAILABLE'}); }
+    // Durable intake already succeeded. Queue promptly; cron remains recovery if
+    // dispatch fails. Never turn a queue failure into duplicate provider work.
+    const dispatch=async()=>{try{await dispatchMediaJobs(env,Date.now());}
+      catch{console.warn(JSON.stringify({task:'media_dispatch',outcome:'failed'}));}};
+    if(typeof context.waitUntil==='function')context.waitUntil(dispatch());else await dispatch();
   }
   return json(200, { status: 'stored' });
 }

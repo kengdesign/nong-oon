@@ -15,3 +15,10 @@ test('unassociated, voice, conflicting and multiple product packaging stays unkn
     const item=parse(text);assert.equal(item.fields.strength.value,null);assert.ok(item.issues.includes('conflicting'));
   }
 });
+test('mixed-case repeated packaging and reverse reading order retain literal evidence',()=>{
+  for(const text of ['Samplebrand 20 mg','Samplebrand 20\nExampleingredient 20 mg\nSamplebrand 20\nExampleingredient 20 mg','Exampleingredient 20 mg\nSamplebrand20\nExampleingredient 20 mg\nSamplebrand20']){
+    const {fields}=parse(text);assert.ok(fields.label.value?.startsWith('Samplebrand'));assert.equal(fields.strength.value,'20 mg');assert.equal(fields.dose.value,null);
+  }
+  // One name bordered by two strength lines is not two independent repetitions.
+  assert.equal(parse('20 mg\nSamplebrand\n20 mg').fields.label.value,null);
+});

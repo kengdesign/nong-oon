@@ -14,15 +14,15 @@ class Element {
   querySelectorAll(selector){const tags=selector.split(',');return this.children.flatMap(el=>[...(tags.includes(el.tagName)?[el]:[]),...el.querySelectorAll(selector)]);}
 }
 const tick=async()=>{for(let i=0;i<12;i++)await new Promise(resolve=>setImmediate(resolve));};
-async function ui({authenticated=true,consented=true}={}){
+async function ui({authenticated=true,consented=true,state='awaiting_review'}={}){
   const root=new Element('div'),feedback=new Element('p'),calls=[];
-  let saved;
-  const context={document:{querySelector:s=>s==='#media-view'?root:feedback,createElement:tag=>new Element(tag)},AbortSignal,crypto,fetch:async(path,options)=>{
+  let saved;const timers=new Map();let nextTimer=0;
+  const context={setTimeout(fn){timers.set(++nextTimer,fn);return nextTimer;},clearTimeout(id){timers.delete(id);},document:{querySelector:s=>s==='#media-view'?root:feedback,createElement:tag=>new Element(tag)},AbortSignal,crypto,fetch:async(path,options)=>{
     calls.push({path,...options});let value;
     if(path==='/api/session')value={authenticated,csrf:'synthetic-csrf'};
     else if(path==='/api/patients')value={patients:[{id:'patient',role:'owner',displayName:'Synthetic'}]};
     else if(path.endsWith('/consent'))value={consented,version:'phase2-media-v1',provider:'Synthetic provider'};
-    else if(path.endsWith('/jobs'))value={jobs:[{id:'job',sourceKind:'printed_label',state:'awaiting_review',createdAt:Date.now()}],currentVersion:0};
+    else if(path.endsWith('/jobs'))value={jobs:[{id:'job',sourceKind:'printed_label',state,createdAt:Date.now()}],currentVersion:0};
     else if(path.endsWith('/jobs/job'))value={sourceKind:'printed_label',draft:JSON.parse(extraction()),reviews:[],currentVersion:0};
     else if(options.method==='PUT'){
       saved=JSON.parse(options.body);value={snapshot:{schedule:saved.schedule},reviewVersion:1,expectedScheduleVersion:0};
@@ -31,7 +31,7 @@ async function ui({authenticated=true,consented=true}={}){
     return {ok:true,json:async()=>value};
   }};
   vm.runInNewContext(readFileSync(new URL('../public/media-review.mjs',import.meta.url),'utf8'),context);await tick();
-  return {root,feedback,calls,get saved(){return saved;}};
+  return {root,feedback,calls,timers,get saved(){return saved;}};
 }
 const find=(root,tag,text)=>root.querySelectorAll(tag).find(e=>e.textContent===text);
 test('cancellation needs a separate explicit action and includes the session CSRF token',async()=>{
@@ -62,4 +62,12 @@ test('UI leaves unknowns blank, saves a review separately, and confirms with CSR
   const confirm=find(f.root,'button','ยืนยันบันทึกตารางและเปิดรายการนี้');assert.ok(confirm);await confirm.events.click();await tick();
   const calls=f.calls.filter(c=>c.path.endsWith('/confirm'));assert.equal(calls.length,1);assert.equal(calls[0].headers['x-csrf-token'],'synthetic-csrf');
   assert.equal(JSON.parse(calls[0].body).acknowledge,true);assert.match(f.feedback.textContent,/บันทึกตารางแล้ว/);
+});
+
+test('queued list refreshes automatically but cancellation form stops refresh without writing',async()=>{
+ const f=await ui({state:'queued'});assert.equal(f.timers.size,1);
+ const fn=[...f.timers.values()][0];f.timers.clear();fn();await tick();
+ assert.equal(f.calls.filter(c=>c.path.endsWith('/jobs')).length,2);
+ assert.equal(f.timers.size,1);await find(f.root,'button','ยกเลิกร่างนี้').events.click();await tick();
+ assert.equal(f.timers.size,0);assert.equal(f.calls.some(c=>c.method!=='GET'),false);
 });
