@@ -9,3 +9,13 @@ export function lookupDrugReference(fields){
   if(typeof name!=='string'||typeof strength!=='string')return null;
   return /^BESTATIN\s*20$/iu.test(name.trim())&&/^20\s*mg$/iu.test(strength.trim())?{...reference}:null;
 }
+
+export const isKnownManufacturer=text=>/^Berlin(?: Pharmaceutical(?: Industry)?)?$/iu.test(text.trim());
+// Literal repeated OCR evidence, not fuzzy correction or manufacturer inference.
+// Only the small reviewed seed is supported; every other product stays unknown.
+export function printedReferenceEvidence(lines){
+  const names=lines.filter(l=>/^BESTATIN\s*20[®™]?$/iu.test(l));
+  const strengths=lines.filter(l=>/^\(?\s*Simvastatin\s+20\s*mg\s*\)?$/iu.test(l));
+  if(names.length<2||strengths.length<2)return null;
+  return {label:{value:names[0].replace(/[®™]$/u,'').trim(),evidence:names[0]},strength:{value:strengths[0].match(/20\s*mg/iu)[0],evidence:strengths[0]}};
+}

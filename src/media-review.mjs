@@ -1,3 +1,4 @@
+import {draftFromText} from './media-extraction.mjs';
 import { validateSchedule } from './care-api.mjs';
 import { parseDraft } from './draft-contract.mjs';
 import { all,batch,stmt,ownerSQL,ownerArgs,liveJobSQL,requireMediaOwner,reject,mediaId,mediaNow } from './media-store.mjs';
@@ -26,8 +27,17 @@ export async function cancelMediaJob(db,{jobId,patientId,actorId,now}){
 // Explicit owner retry only. Never overwrite edited/confirmed reviews or reset
 // attempts, quotas, source deduplication or the original 24-hour expiry.
 export async function retryMediaJob(db,context){
-  await readMediaJob(db,context);
+  const current=await readMediaJob(db,context);
   const {jobId,patientId,actorId,now,providerId}=context;
+  if(current.draft.sourceText){
+    const draft={...JSON.parse(draftFromText(current.draft.sourceText,'printed_label')),sourceText:current.draft.sourceText};
+    const rows=await all(db,`UPDATE media_jobs SET draft_json=?,updated_at=? WHERE id=? AND patient_id=? AND actor_id=?
+      AND state='awaiting_review' AND expires_at>? AND unsent_at IS NULL
+      AND NOT EXISTS(SELECT 1 FROM media_reviews WHERE job_id=media_jobs.id) AND ${liveJobSQL} RETURNING id`,
+      [JSON.stringify(draft),now,jobId,patientId,actorId,now,now]);
+    if(rows.length!==1)reject('MEDIA_RETRY_UNAVAILABLE',409);
+    return {reparsed:true};
+  }
   const rows=await all(db,`UPDATE media_jobs SET state='queued',draft_json=NULL,last_code=NULL,dispatch_at=0,updated_at=?
     WHERE id=? AND patient_id=? AND actor_id=? AND provider_id=? AND state='awaiting_review'
       AND expires_at>? AND attempts<3 AND message_id IS NOT NULL AND unsent_at IS NULL

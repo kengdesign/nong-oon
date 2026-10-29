@@ -45,8 +45,8 @@ export async function handleMediaApi(request,env,{actorId,now=Date.now()}={}){
         if(Object.keys(data).join(',')!=='acknowledge'||data.acknowledge!==true)reject('INVALID_MEDIA_BODY');
         if(env.MEDIA_PROCESSING_ENABLED!=='true'||!providerReady(env))reject('MEDIA_PROVIDER_NOT_CONFIGURED',503);
         const result=await retryMediaJob(env.DB,context);
-        try{await dispatchMediaJobs(env,now);}catch{/* Cron recovers durable queued work. */}
-        return json(202,result);
+        try{if(result.queued)await dispatchMediaJobs(env,now);}catch{/* Cron recovers durable queued work. */}
+        return json(result.queued?202:200,result);
       }
       if(!j[2]&&method==='DELETE')return json(200,await cancelMediaJob(env.DB,context));
       if(!j[2]&&method==='GET'){

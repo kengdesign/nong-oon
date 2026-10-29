@@ -52,9 +52,9 @@ function cancelJob(id){stopRefresh();
 async function openJob(id){stopRefresh();const path=base()+`/jobs/${encodeURIComponent(id)}`,view=await api(path);const container=card('ตรวจเทียบกับต้นฉบับ',button('กลับรายการ',render));root.replaceChildren(container);
   container.append(node(view.sourceKind==='voice'?'audio':'img',null,view.sourceKind==='voice'?{src:path+'/source',controls:'',preload:'none'}:{src:path+'/source',alt:'ภาพต้นฉบับสำหรับตรวจข้อมูล'}));
   if(view.draft.sourceText){const details=node('details',null);details.append(node('summary','ข้อความที่ OCR อ่านได้ — อาจอ่านผิด กรุณาเทียบภาพ'),node('pre',view.draft.sourceText));container.append(details);}
-  if(!view.reviews.length&&view.sourceKind==='printed_label')container.append(button('อ่านภาพเดิมใหม่',()=>{
-    container.replaceChildren(node('p','อ่านภาพเดิมด้วยบริการ OCR อีกครั้ง อาจมีค่าบริการ และผลร่างเดิมจะถูกแทนที่ ข้อมูลวันเวลาจะไม่ถูกเติมให้เอง'),
-      button('กลับไปตรวจร่าง',()=>openJob(id)),button('ยืนยันอ่านภาพเดิมใหม่',async()=>{await api(path+'/retry','POST',{acknowledge:true});await render();}));
+  if(!view.reviews.length&&view.sourceKind==='printed_label')container.append(button(view.draft.sourceText?'แยกข้อความเดิมใหม่ (ไม่เรียก OCR)':'อ่านภาพเดิมใหม่',()=>{
+    container.replaceChildren(node('p',view.draft.sourceText?'แยกข้อมูลจากข้อความ OCR เดิมอีกครั้งโดยไม่เรียกผู้ให้บริการ ผลร่างเดิมจะถูกแทนที่ และไม่เติมข้อมูลวันเวลาให้เอง':'อ่านภาพเดิมด้วยบริการ OCR อีกครั้ง อาจมีค่าบริการ และผลร่างเดิมจะถูกแทนที่ ข้อมูลวันเวลาจะไม่ถูกเติมให้เอง'),
+      button('กลับไปตรวจร่าง',()=>openJob(id)),button(view.draft.sourceText?'ยืนยันแยกข้อความเดิมใหม่':'ยืนยันอ่านภาพเดิมใหม่',async()=>{await api(path+'/retry','POST',{acknowledge:true});await render();}));
   }));
   view.draft.items.forEach((item,i)=>{const existing=view.reviews.find(r=>r.itemIndex===i);if(existing?.confirmed){container.append(card(`รายการ ${i+1}`,node('p','บันทึกแล้ว')));return;}
     const section=card(`รายการ ${i+1}`);container.append(section);
