@@ -1,7 +1,9 @@
+import {providerReady} from './media-providers.mjs';
+import {lookupDrugReference} from './drug-reference.mjs';
 import {json} from './http.mjs';
 import {MEDIA_CONSENT_VERSION} from './media-policy.mjs';
-import {MediaError,PROVIDERS,all,stmt,checked,requireMediaOwner,grantMediaConsent,reject,liveJobSQL} from './media-store.mjs';
-import {readMediaJob,saveMediaReview,confirmMediaReview,cancelMediaJob} from './media-review.mjs';
+import {MediaError,PROVIDERS,all,stmt,checked,requireMediaOwner,grantMediaConsent,reject,liveJobSQL,dispatchMediaJobs} from './media-store.mjs';
+import {readMediaJob,saveMediaReview,confirmMediaReview,cancelMediaJob,retryMediaJob} from './media-review.mjs';
 async function body(request){
   const text=await request.text();if(new TextEncoder().encode(text).length>16_384)reject('BODY_TOO_LARGE',413);
   try{const value=JSON.parse(text);if(!value||typeof value!=='object'||Array.isArray(value))throw Error();return value;}
@@ -32,16 +34,25 @@ export async function handleMediaApi(request,env,{actorId,now=Date.now()}={}){
     }
     if(tail==='jobs'&&method==='GET'){
       const jobs=await all(env.DB,`SELECT id,source_kind AS sourceKind,state,created_at AS createdAt,expires_at AS expiresAt FROM media_jobs
-        WHERE patient_id=? AND actor_id=? AND expires_at>? AND provider_id=? AND ${liveJobSQL} ORDER BY created_at DESC LIMIT 20`,[patientId,actorId,now,env.MEDIA_PROVIDER_ID,now]);
+        WHERE patient_id=? AND actor_id=? AND expires_at>? AND provider_id=? AND ${liveJobSQL,dispatchMediaJobs} ORDER BY created_at DESC LIMIT 20`,[patientId,actorId,now,env.MEDIA_PROVIDER_ID,now]);
       return json(200,{jobs,currentVersion});
     }
-    const j=/^jobs\/([A-Za-z0-9_-]{1,128})(?:\/(source|reviews\/(\d+)(\/confirm)?))?$/.exec(tail);
+    const j=/^jobs\/([A-Za-z0-9_-]{1,128})(?:\/(source|retry|reviews\/(\d+)(\/confirm)?))?$/.exec(tail);
     if(j){
       const jobId=j[1],context={jobId,patientId,actorId,now,providerId:env.MEDIA_PROVIDER_ID};
+      if(j[2]==='retry'&&method==='POST'){
+        const data=await body(request);
+        if(Object.keys(data).join(',')!=='acknowledge'||data.acknowledge!==true)reject('INVALID_MEDIA_BODY');
+        if(env.MEDIA_PROCESSING_ENABLED!=='true'||!providerReady(env))reject('MEDIA_PROVIDER_NOT_CONFIGURED',503);
+        const result=await retryMediaJob(env.DB,context);
+        try{await dispatchMediaJobs(env,now);}catch{/* Cron recovers durable queued work. */}
+        return json(202,result);
+      }
       if(!j[2]&&method==='DELETE')return json(200,await cancelMediaJob(env.DB,context));
       if(!j[2]&&method==='GET'){
         const view=await readMediaJob(env.DB,context);
         return json(200,{jobId,sourceKind:view.row.source_kind,draft:view.draft,currentVersion:view.currentVersion,expiresAt:view.row.expires_at,
+          references:view.draft.items.map(item=>lookupDrugReference(item.fields)),
           reviews:view.reviews.map(r=>({itemIndex:r.item_index,version:r.version,confirmed:r.confirmed_at!==null,expiresAt:r.expires_at,snapshot:JSON.parse(r.snapshot_json)}))});
       }
       if(j[2]==='source'&&method==='GET'){

@@ -67,3 +67,10 @@ test('Vision response bound accepts exact limit and cancels oversized streams',a
   await assert.rejects(createMediaInfer(env,{fetcher:async()=>new Response(stream),onTranscript(){observed=true;}})(input),/MEDIA_PROVIDER_OUTPUT_REJECTED/);
   assert.equal(cancelled,true);assert.equal(observed,false);
 });
+
+test('image OCR text remains in protected draft payload for review, not inferred regimen',async()=>{
+ const text='SYNTHETIC OCR ONLY\nSamplebrand 20 mg';
+ const result=JSON.parse(await createMediaInfer(env,{fetcher:async()=>Response.json({responses:[{fullTextAnnotation:{text}}]})})(input));
+ assert.equal(result.sourceText,text);assert.equal(parseDraft(JSON.stringify(result)).ok,true);
+ assert.equal(result.items[0].fields.dose.value,null);assert.equal(result.items[0].fields.times.value,null);
+});

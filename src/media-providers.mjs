@@ -46,7 +46,10 @@ export function createMediaInfer(env,{fetcher=fetch,onTranscript}={}){
         text=textOutput(result.responses[0].fullTextAnnotation?.text);
       }else fail('MEDIA_PROVIDER_SOURCE_UNSUPPORTED');
       // Acceptance observes only validated, bounded text; never clone an unbounded response.
-      const draft=draftFromText(text,sourceKind);
+      let draft=draftFromText(text,sourceKind);
+      // Private review payload only, bounded and erased with draft expiry/cancel.
+      // Never emitted in logs or aggregate quality reports.
+      if(sourceKind==='printed_label')draft=JSON.stringify({...JSON.parse(draft),sourceText:text});
       if(onTranscript)onTranscript(text);
       return draft;
     }catch(error){if(error instanceof MediaError)throw error;fail('MEDIA_PROVIDER_FAILED');}

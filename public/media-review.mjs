@@ -4,7 +4,7 @@ let session,patientId,busy=false,refreshTimer=null,refreshCount=0;
 function stopRefresh(){if(refreshTimer!==null){clearTimeout(refreshTimer);refreshTimer=null;}}
 const words={label:'ชื่อรายการตามฉลาก',strength:'ความแรงตามฉลาก',dose:'จำนวนต่อครั้งตามฉลาก',instructions:'วิธีใช้และคำแนะนำ',
   times:'เวลาแจ้งเตือน (เช่น 08:00,18:00)',weekdays:'วันในสัปดาห์',startDate:'วันที่เริ่ม',endDate:'วันที่สิ้นสุด (เว้นว่างได้)',useMode:'ลักษณะการใช้'};
-const errors={MEDIA_DISABLED:'ฟีเจอร์ภาพและเสียงยังไม่เปิดใช้งาน',MEDIA_PROVIDER_NOT_CONFIGURED:'กำลังเตรียมบริการอ่านภาพและเสียง',
+const errors={MEDIA_RETRY_UNAVAILABLE:'อ่านใหม่ไม่ได้ ร่างอาจมีการแก้ไขแล้วหรือครบจำนวนครั้ง กรุณาตรวจรายการล่าสุด',MEDIA_DISABLED:'ฟีเจอร์ภาพและเสียงยังไม่เปิดใช้งาน',MEDIA_PROVIDER_NOT_CONFIGURED:'กำลังเตรียมบริการอ่านภาพและเสียง',
   MEDIA_SCHEDULE_CHANGED:'ตารางมีการเปลี่ยนแปลง กรุณาโหลดและตรวจร่างใหม่',MEDIA_REVIEW_CHANGED:'ร่างเปลี่ยนหรือหมดอายุ กรุณาตรวจใหม่',
   MEDIA_CONFIRMATION_CONFLICT:'บันทึกไม่ได้ อาจมีรายการซ้ำหรือตารางเปลี่ยนแล้ว กรุณาตรวจรายการล่าสุด',
   MEDIA_DRAFT_UNAVAILABLE:'ร่างนี้หมดอายุ ถูกยกเลิก หรือบันทึกแล้ว',MEDIA_REGIMEN_UNSUPPORTED:'รายการนี้ต้องตรวจเพิ่มเติม กรุณาใช้การกรอกตารางเอง',
@@ -51,12 +51,20 @@ function cancelJob(id){stopRefresh();
 }
 async function openJob(id){stopRefresh();const path=base()+`/jobs/${encodeURIComponent(id)}`,view=await api(path);const container=card('ตรวจเทียบกับต้นฉบับ',button('กลับรายการ',render));root.replaceChildren(container);
   container.append(node(view.sourceKind==='voice'?'audio':'img',null,view.sourceKind==='voice'?{src:path+'/source',controls:'',preload:'none'}:{src:path+'/source',alt:'ภาพต้นฉบับสำหรับตรวจข้อมูล'}));
+  if(view.draft.sourceText){const details=node('details',null);details.append(node('summary','ข้อความที่ OCR อ่านได้ — อาจอ่านผิด กรุณาเทียบภาพ'),node('pre',view.draft.sourceText));container.append(details);}
+  if(!view.reviews.length&&view.sourceKind==='printed_label')container.append(button('อ่านภาพเดิมใหม่',()=>{
+    container.replaceChildren(node('p','อ่านภาพเดิมด้วยบริการ OCR อีกครั้ง อาจมีค่าบริการ และผลร่างเดิมจะถูกแทนที่ ข้อมูลวันเวลาจะไม่ถูกเติมให้เอง'),
+      button('กลับไปตรวจร่าง',()=>openJob(id)),button('ยืนยันอ่านภาพเดิมใหม่',async()=>{await api(path+'/retry','POST',{acknowledge:true});await render();}));
+  }));
   view.draft.items.forEach((item,i)=>{const existing=view.reviews.find(r=>r.itemIndex===i);if(existing?.confirmed){container.append(card(`รายการ ${i+1}`,node('p','บันทึกแล้ว')));return;}
     const section=card(`รายการ ${i+1}`);container.append(section);
     section.append(node('pre',Object.entries(item.fields).map(([key,f])=>`${words[key]}: ${f.value===null?'อ่านไม่ได้ / ไม่ระบุ':Array.isArray(f.value)?f.value.join(','):f.value}${f.evidence?'\nข้อความต้นทาง: '+f.evidence:''}`).join('\n\n')));
     if(item.fields.useMode.value==='as_needed'||view.draft.sourceKind==='pill_photo'){section.append(node('p',errors.MEDIA_REGIMEN_UNSUPPORTED));return;}
     if(item.issues.length)section.append(node('p','มีข้อมูลที่อ่านไม่ชัดหรืออาจซ้ำ กรุณาตรวจจากฉลากและแก้ให้ถูกต้อง',{class:'media-note'}));
     section.append(node('p','ข้อมูลที่ไม่พบจะเว้นว่าง คุณกรอกหรือแก้ไขได้จากฉลากหรือคำแนะนำที่ตรวจสอบแล้ว ระบบไม่เติมจำนวนและเวลาให้เอง'));
+    const reference=view.references?.[i];
+    if(reference){const info=card('ข้อมูลอ้างอิงยา — กรุณาตรวจยืนยัน',node('p',`ชื่อการค้า: ${reference.tradeName} | สารสำคัญ: ${reference.ingredient} | ความแรง: ${reference.strength}`),
+      node('p',`ผู้ผลิต: ${reference.manufacturer} | กลุ่มยา: ${reference.category}`),node('a','ทะเบียน อย. (ข้อมูลอ้างอิง ไม่ใช่คำสั่งใช้ยา)',{href:reference.source,target:'_blank',rel:'noopener noreferrer'}));section.append(info);}
     const form=node('form',null),inputs={};section.append(form);const saved=existing?.snapshot;
     for(const key of ['label','strength','dose','instructions','times','weekdays','startDate','endDate'])inputs[key]=field(form,key,
       saved?(key==='strength'||key==='dose'||key==='instructions'?saved[key]:saved.schedule[key]):item.fields[key].value);
