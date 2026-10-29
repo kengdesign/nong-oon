@@ -23,6 +23,20 @@ export async function cancelMediaJob(db,{jobId,patientId,actorId,now}){
   return {cancelled:true,cleanupPending:true};
 }
 
+// Explicit owner retry only. Never overwrite edited/confirmed reviews or reset
+// attempts, quotas, source deduplication or the original 24-hour expiry.
+export async function retryMediaJob(db,context){
+  await readMediaJob(db,context);
+  const {jobId,patientId,actorId,now,providerId}=context;
+  const rows=await all(db,`UPDATE media_jobs SET state='queued',draft_json=NULL,last_code=NULL,dispatch_at=0,updated_at=?
+    WHERE id=? AND patient_id=? AND actor_id=? AND provider_id=? AND state='awaiting_review'
+      AND expires_at>? AND attempts<3 AND message_id IS NOT NULL AND unsent_at IS NULL
+      AND NOT EXISTS(SELECT 1 FROM media_reviews WHERE job_id=media_jobs.id)
+      AND ${liveJobSQL} RETURNING id`,[now,jobId,patientId,actorId,providerId,now,now]);
+  if(rows.length!==1)reject('MEDIA_RETRY_UNAVAILABLE',409);
+  return {queued:true};
+}
+
 export async function readMediaJob(db,{jobId,patientId,actorId,now,providerId}){
   if(!mediaId(jobId)||!mediaNow(now))reject('INVALID_MEDIA_INPUT');
   const currentVersion=await requireMediaOwner(db,patientId,actorId);

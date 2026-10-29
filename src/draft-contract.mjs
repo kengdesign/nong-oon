@@ -16,9 +16,10 @@ const list = (v,max,check) => Array.isArray(v) && v.length >= 1 && v.length <= m
 
 // Errors contain fixed codes only, never input values or provider exception text.
 export function validateDraft(value) {
-  if (!exact(value,['schemaVersion','sourceKind','items']) || value.schemaVersion !== DRAFT_VERSION ||
+  if (!(exact(value,['schemaVersion','sourceKind','items'])||exact(value,['schemaVersion','sourceKind','items','sourceText'])) || value.schemaVersion !== DRAFT_VERSION ||
       !SOURCE_KINDS.includes(value.sourceKind) || !Array.isArray(value.items) || value.items.length < 1 || value.items.length > 20)
     return {ok:false, errors:['INVALID_DRAFT']};
+  if(Object.hasOwn(value,'sourceText')&&(value.sourceKind!=='printed_label'||typeof value.sourceText!=='string'||!value.sourceText.trim()||value.sourceText.length>8000||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value.sourceText)))return {ok:false,errors:['INVALID_SOURCE_TEXT']};
   const errors = new Set();
   for (const item of value.items) {
     if (!exact(item,['fields','issues']) || !exact(item.fields,DRAFT_FIELDS) ||
