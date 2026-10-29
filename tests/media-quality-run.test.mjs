@@ -9,6 +9,7 @@ test('image retry archives failure, preserves voice and blocks successful replay
   const root=mkdtempSync(join(tmpdir(),'oon-quality-')),folder=join(root,'acceptance-media/private');
   mkdirSync(folder,{recursive:true});writeFileSync(join(root,'acceptance-media/.dev.vars'),'ACCEPTANCE_TOKEN="abc123"');
   writeFileSync(join(folder,'image.jpg'),'123456789012');writeFileSync(join(folder,'image.txt'),'synthetic');
+  writeFileSync(join(folder,'image.reference.json'),JSON.stringify({scope:'full',humanReviewed:true}));
   const failed={state:'failed',code:'SAMPLE_OR_PROVIDER_REJECTED'};
   writeFileSync(join(folder,'image.attempt.json'),JSON.stringify(failed));
   const voice='{"kind":"voice","screen":"needs_review"}';writeFileSync(join(folder,'voice.attempt.json'),voice);

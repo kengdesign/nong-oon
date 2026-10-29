@@ -15,6 +15,10 @@ for(const [kind,file,type] of [['image','image.jpg','image/jpeg'],['voice','voic
   const bytes=readFileSync(`${folder}/${file}`);if(bytes.length>5*1024*1024)throw Error('SAMPLE_TOO_LARGE');
   const reference=readFileSync(`${folder}/${kind}.txt`,'utf8').replace(/^\uFEFF/,'').trim();
   if(!reference||reference.includes('REPLACE_')){results.push({kind,state:'blocked',code:'REFERENCE_REQUIRED'});continue;}
+  const reviewPath=`${folder}/${kind}.reference.json`;
+  if(!existsSync(reviewPath)){results.push({kind,state:'blocked',code:'REFERENCE_REVIEW_REQUIRED'});continue;}
+  const review=JSON.parse(readFileSync(reviewPath,'utf8'));
+  if(review.humanReviewed!==true||!['full','partial'].includes(review.scope)){results.push({kind,state:'blocked',code:'REFERENCE_REVIEW_REQUIRED'});continue;}
   // A receipt blocks accidental paid replays; remove only deliberately for a new sample.
   const receipt=`${folder}/${kind}.attempt.json`;
   if(existsSync(receipt)){
@@ -29,7 +33,7 @@ for(const [kind,file,type] of [['image','image.jpg','image/jpeg'],['voice','voic
   }
   writeFileSync(receipt,JSON.stringify({kind,state:'started',at:new Date().toISOString()}));
   try{
-    const response=await fetch('http://127.0.0.1:8798/measure',{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({kind,base64:bytes.toString('base64'),contentType:type,reference}),signal:AbortSignal.timeout(90000)});
+    const response=await fetch('http://127.0.0.1:8798/measure',{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({kind,base64:bytes.toString('base64'),contentType:type,reference,review}),signal:AbortSignal.timeout(90000)});
     const result=await response.json();writeFileSync(receipt,JSON.stringify(result,null,2));results.push(result);
   }catch{const result={kind,state:'failed',code:'PREVIEW_UNREACHABLE_OR_TIMEOUT'};writeFileSync(receipt,JSON.stringify(result));results.push(result);}
 }

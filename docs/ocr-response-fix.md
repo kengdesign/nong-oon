@@ -23,3 +23,13 @@ The retry is allowed only for a previous failed SAMPLE_OR_PROVIDER_REJECTED rece
 ## Remaining gates
 
 Actual image and voice accuracy on multiple synthetic Thai samples is not yet established. The main cleanup function passed real isolated D1/R2 cron acceptance in operator evidence; this does not verify the main staging cron. Metadata retention age and current staging switches require explicit verification before Phase 2. This patch does not enable those switches or authorize a pilot.
+
+## Independent reference assessment (follow-up)
+
+A reference containing only selected lines must not be compared against full-image OCR as a certified full-transcript error rate. The earlier 82.9% is an unqualified raw comparison, not a validated Google accuracy estimate. No revised score is available without a matching transcript pair and reviewed scope.
+
+Acceptance now requires a private `<kind>.reference.json` sidecar with `scope` (`full` or `partial`) and `humanReviewed: true` before a paid runner request. A full-transcript score is available only for human-reviewed full scope. Optional `referenceDraft` must be a valid draft-contract object manually reviewed independently of the extractor. It is never generated from reference text by the extractor under test. Unknown fields remain null; unprovided times, dates, strengths and identities must not be guessed. No gold means no field score. Image and voice must both pass their separate transcript/field screens before the engineering screen passes; pilotReady remains false in every result.
+
+Offline analysis needs a private JSON file with `sourceKind`, `reference`, `predictedTranscript`, and `review` (the sidecar object above). Run `node scripts/media-assess-offline.mjs acceptance-media/private/offline-case.json`. It performs zero provider calls, writes no transcript and prints only aggregate results. The earlier aggregate receipt does not contain the OCR transcript, so it cannot reconstruct or rescore that run. Do not rerun OCR simply to manufacture a passing result. Private images, transcripts, human gold and identities must never be committed. Public regressions use invented text only.
+
+The narrow labelled-line extractor is still a limitation for natural hospital labels or speech. This change makes that limitation visible; it does not claim to solve natural-language extraction or authorize automatic medication scheduling.
