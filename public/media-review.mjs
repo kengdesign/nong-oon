@@ -19,7 +19,7 @@ async function task(action){if(busy)return;busy=true;root.setAttribute('aria-bus
   const controls=[...root.querySelectorAll('button,input,select,textarea')].map(el=>[el,el.disabled]);controls.forEach(([el])=>{el.disabled=true;});
   try{await action();}catch(error){feedback.textContent=error.message;}finally{busy=false;root.setAttribute('aria-busy','false');controls.forEach(([el,disabled])=>{if(el.isConnected)el.disabled=disabled;});}}
 function field(form,key,value){const label=node('label',words[key]),input=node(key==='instructions'?'textarea':'input',null,{name:key,...(key==='instructions'?{}:{type:['startDate','endDate'].includes(key)?'date':'text'}),...(key==='endDate'?{}:{required:''})});
-  input.value=Array.isArray(value)?value.join(','):value??'';if(!['times','weekdays','startDate','endDate'].includes(key))input.maxLength=key==='instructions'?240:120;
+  input.value=Array.isArray(value)?value.join(','):value??'';if(value===null&&!['startDate','endDate'].includes(key))input.setAttribute('placeholder','ไม่พบในภาพ — กรอกจากข้อมูลที่คุณตรวจสอบแล้ว');if(!['times','weekdays','startDate','endDate'].includes(key))input.maxLength=key==='instructions'?240:120;
   label.append(input);form.append(label);return input;}
 async function render(){session=await api('/api/session');if(!session.authenticated){root.replaceChildren(card('เข้าใช้ก่อนตรวจร่าง',node('a','เข้าใช้ผ่าน LINE',{href:'/auth/login'})));return;}
   const data=await api('/api/patients');const own=data.patients.filter(p=>p.role==='owner');
@@ -51,6 +51,7 @@ async function openJob(id){const path=base()+`/jobs/${encodeURIComponent(id)}`,v
     section.append(node('pre',Object.entries(item.fields).map(([key,f])=>`${words[key]}: ${f.value===null?'อ่านไม่ได้ / ไม่ระบุ':Array.isArray(f.value)?f.value.join(','):f.value}${f.evidence?'\nข้อความต้นทาง: '+f.evidence:''}`).join('\n\n')));
     if(item.fields.useMode.value==='as_needed'||view.draft.sourceKind==='pill_photo'){section.append(node('p',errors.MEDIA_REGIMEN_UNSUPPORTED));return;}
     if(item.issues.length)section.append(node('p','มีข้อมูลที่อ่านไม่ชัดหรืออาจซ้ำ กรุณาตรวจจากฉลากและแก้ให้ถูกต้อง',{class:'media-note'}));
+    section.append(node('p','ข้อมูลที่ไม่พบจะเว้นว่าง คุณกรอกหรือแก้ไขได้จากฉลากหรือคำแนะนำที่ตรวจสอบแล้ว ระบบไม่เติมจำนวนและเวลาให้เอง'));
     const form=node('form',null),inputs={};section.append(form);const saved=existing?.snapshot;
     for(const key of ['label','strength','dose','instructions','times','weekdays','startDate','endDate'])inputs[key]=field(form,key,
       saved?(key==='strength'||key==='dose'||key==='instructions'?saved[key]:saved.schedule[key]):item.fields[key].value);
@@ -61,7 +62,7 @@ async function openJob(id){const path=base()+`/jobs/${encodeURIComponent(id)}`,v
       schedule.times=inputs.times.value.split(',').map(v=>v.trim());schedule.weekdays=inputs.weekdays.value.split(',').map(v=>v.trim()).map(v=>/^\d$/.test(v)?Number(v):NaN);
       task(async()=>{const r=await api(path+`/reviews/${i}`,'PUT',{expectedReviewVersion:existing?.version??0,expectedScheduleVersion:view.currentVersion,
         sourceChecked:true,issuesResolved:true,useMode:'scheduled',strength:inputs.strength.value.trim(),dose:inputs.dose.value.trim(),schedule});
-        const preview=card('ยืนยันตารางที่ตรวจแล้ว',node('pre',`${r.snapshot.schedule.label}\n${r.snapshot.schedule.instructions}\nเวลา: ${r.snapshot.schedule.times.join(', ')}\nวัน: ${r.snapshot.schedule.weekdays.join(', ')}\nเริ่ม: ${r.snapshot.schedule.startDate}\nสิ้นสุด: ${r.snapshot.schedule.endDate??'ไม่ระบุ'}`));
+        const preview=card('ยืนยันตารางที่ตรวจแล้ว',node('pre',`${r.snapshot.schedule.label}\nความแรง: ${inputs.strength.value.trim()}\nจำนวนต่อครั้ง: ${inputs.dose.value.trim()}\n${r.snapshot.schedule.instructions}\nเวลา: ${r.snapshot.schedule.times.join(', ')}\nวัน: ${r.snapshot.schedule.weekdays.join(', ')}\nเริ่ม: ${r.snapshot.schedule.startDate}\nสิ้นสุด: ${r.snapshot.schedule.endDate??'ไม่ระบุ'}`));
         section.replaceChildren(preview);const confirmationId=crypto.randomUUID();
         preview.append(button('กลับไปแก้',()=>openJob(id)),button('ยืนยันบันทึกตารางและเปิดรายการนี้',async()=>{
           await api(path+`/reviews/${i}/confirm`,'POST',{confirmationId,expectedReviewVersion:r.reviewVersion,expectedScheduleVersion:r.expectedScheduleVersion,acknowledge:true});
