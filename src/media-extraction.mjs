@@ -102,6 +102,14 @@ export function draftFromText(text,sourceKind){
       if(fields.label.value===null&&herb&&notes.length<8)notes.push({kind:'herb',text:herb[0],evidence:herb[0]});
     }
   }
+  if(sourceKind==='printed_label'&&fields.label.value===null&&!lines.some(l=>/^ชื่อยา\s*[:：]/u.test(l))){
+    // Literal botanical product names are valid labels too. No plant dictionary,
+    // indication-to-identity conversion, or removal of ambiguous trailing text.
+    const herbs=lines.map(line=>line.match(/^(?:(?:ชื่อสมุนไพร|สมุนไพร)\s*[:：]\s*)?((?:ใบ|ราก|ดอก|ผล|เปลือก|เมล็ด)[ก-๙]{2,50}?(?:แคปซูล|ผง|สกัด))(?=\s|$)/u)?.[1]).filter(Boolean);
+    const unique=[...new Set(herbs)];
+    if(unique.length===1&&!issues.has('conflicting')){fields.label={value:unique[0],evidence:unique[0]};issues.add('ambiguous');}
+    else if(unique.length>1)issues.add('conflicting');
+  }
   if(sourceKind==='voice'){
     // Keep ASR spelling verbatim. A symptom phrase is not a drug identity.
     const joined=lines.join(' '),start=joined.search(/(?:รับประทาน|รับทาน|ทานครั้งละ|ใช้ภายนอก)/u);

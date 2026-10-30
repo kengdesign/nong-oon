@@ -27,9 +27,10 @@ export function extractedFields(draft){
  const item=draft.items[0];
  return {drug_name:item.fields.label.value,strength:item.fields.strength.value,instructions:item.fields.instructions.value};
 }
-export function scoreFields(draft,gold,reference){
+export function scoreFields(draft,gold,reference,{taskFields=FIELD_NAMES}={}){
  if(!gold||gold.humanReviewed!==true||gold.independentlyAnnotated!==true||gold.referenceSha256!==referenceHash(reference)||
    !gold.fields||typeof gold.fields!=='object'||Array.isArray(gold.fields)||Object.keys(gold.fields).some(k=>!FIELD_NAMES.includes(k)))throw Error('UNREVIEWED_OR_STALE_FIELD_GOLD');
+ if(!Array.isArray(taskFields)||!taskFields.length||new Set(taskFields).size!==taskFields.length||taskFields.some(k=>!FIELD_NAMES.includes(k)))throw Error('INVALID_TASK_FIELDS');
  const predicted=extractedFields(draft),fields={};let known=0,matched=0,positiveKnown=0,positiveMatched=0,falsePositives=0;
  for(const key of FIELD_NAMES){
   if(!Object.hasOwn(gold.fields,key)){fields[key]={state:'not_annotated',accuracyPercent:null};continue;}
@@ -40,7 +41,8 @@ export function scoreFields(draft,gold,reference){
   fields[key]={state:match?'matched':actual===null?'missing':'mismatch',expectedAbsent:expected===null,accuracyPercent:match?100:0};
  }
  const percentage=(a,b)=>b?Math.round(10000*a/b)/100:null;
- return {fields,knownFields:known,matchedFields:matched,coveragePercent:percentage(known,3),fieldAccuracyPercent:percentage(matched,known),
+ const taskKnown=taskFields.filter(k=>Object.hasOwn(gold.fields,k)),taskMatched=taskKnown.filter(k=>fields[k].accuracyPercent===100);
+ return {taskFields,taskKnownFields:taskKnown.length,taskAccuracyPercent:percentage(taskMatched.length,taskKnown.length),taskCoveragePercent:percentage(taskKnown.length,taskFields.length),taskAbove80:taskKnown.length===taskFields.length?taskMatched.length/taskKnown.length>0.8:null,fields,knownFields:known,matchedFields:matched,coveragePercent:percentage(known,3),fieldAccuracyPercent:percentage(matched,known),
   positiveFieldAccuracyPercent:percentage(positiveMatched,positiveKnown),falsePositives,
   above80:known===3&&positiveKnown>0?matched/known>0.8:null,providerCalls:0,productionReady:false};
 }
