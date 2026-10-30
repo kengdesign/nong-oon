@@ -12,3 +12,7 @@ test('synthetic mock transcripts retain literal fields and never invent regimens
  }
  assert.equal(assets.filter(a=>a.negative).length,1);
 });
+test('additional authored image/voice transcript cases pass without claiming OCR or ASR measurement',async()=>{
+ const {runSyntheticRegression}=await import('../scripts/synthetic-quality-regression.mjs');
+ const result=runSyntheticRegression();assert.equal(result.failures,0);assert.equal(result.cases,15);assert.equal(result.providerCalls,0);assert.equal(result.ocrAccuracy,null);assert.equal(result.speechAccuracy,null);assert.equal(result.pilotReady,false);
+});
