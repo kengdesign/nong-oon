@@ -21,3 +21,5 @@ If automatic cron shutdown fails, select the named isolated worker in Cloudflare
 ## Evidence recorded during implementation
 
 Local tests execute the actual pipeline, review/confirmation/cancellation handlers and cleanup against disposable SQLite/R2 adapters and a synthetic Vision response. Those are local assertions, not Cloudflare or live OCR success. The production entrypoint, bindings, migrations and LINE delivery switch are unchanged. Remote run remains NOT RUN until the operator script returns its evidence. Browser rendering acceptance remains a separate pending step.
+
+Cron startup may take longer than one five-minute interval. The operator waits up to 25 minutes before disabling the isolated cron. A timeout is not an OCR failure: inspect the existing evidence row before resuming; never recreate resources or clear the singleton claim to force a paid replay.

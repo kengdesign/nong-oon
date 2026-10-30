@@ -31,8 +31,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Isolated Vision secret setup failed' }
 npx.cmd --yes wrangler@4.154.0 deploy --config $config
 if ($LASTEXITCODE -ne 0) { throw 'Isolated worker deployment failed' }
 $report = $null
-    for ($attempt=1; $attempt -le 18; $attempt++) {
-        Write-Host "Waiting for isolated cron/evidence ($attempt/18)..."
+    for ($attempt=1; $attempt -le 75; $attempt++) {
+        Write-Host "Waiting for isolated cron/evidence ($attempt/75)..."
         Start-Sleep -Seconds 20
         $raw = & npx.cmd --yes wrangler@4.154.0 d1 execute E2E_DB --remote --config $config --command "SELECT state,report_json FROM single_account_e2e WHERE id='single-account-v1';" --json 2>$null
         if ($LASTEXITCODE -ne 0) { continue }

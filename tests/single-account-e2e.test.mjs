@@ -24,3 +24,9 @@ test('bad provider output is failed, never retried automatically or misreported 
   assert.equal(result.state,'failed');await runRehearsal(f.env);assert.equal(calls,1);
  }finally{f.close();}
 });
+
+test('withdrawal success is independent of trigger-inclusive D1 change counts',async()=>{
+ const f=await fixture();const original=f.env.E2E_DB.batch.bind(f.env.E2E_DB);let inflated=false;
+ f.env.E2E_DB.batch=async statements=>{const result=await original(statements);if(statements[0].query.startsWith('UPDATE patients SET revoked_at=')){result[0].meta.changes=7;inflated=true;}return result;};
+ try {const report=await runRehearsal(f.env,{providerMode:'synthetic_provider_response',providerFetch:async(_url,init)=>{const body=JSON.parse(init.body),a=assets.find(a=>a.base64===body.requests[0].image.content);return Response.json({responses:[{fullTextAnnotation:{text:a.reference}}]});}});assert.equal(inflated,true);assert.equal(report.state,'passed');}finally{f.close();}
+});
