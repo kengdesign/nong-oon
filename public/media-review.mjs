@@ -64,7 +64,7 @@ async function openJob(id){stopRefresh();const path=base()+`/jobs/${encodeURICom
     section.append(node('p','ข้อมูลที่ไม่พบจะเว้นว่าง คุณกรอกหรือแก้ไขได้จากฉลากหรือคำแนะนำที่ตรวจสอบแล้ว ระบบไม่เติมจำนวนและเวลาให้เอง'));
     const reference=view.references?.[i];
     if(reference){const info=card('ข้อมูลอ้างอิงยา — กรุณาตรวจยืนยัน',node('p',`ชื่อการค้า: ${reference.tradeName} | สารสำคัญ: ${reference.ingredient} | ความแรง: ${reference.strength}`),
-      node('p',`ผู้ผลิต: ${reference.manufacturer} | กลุ่มยา: ${reference.category}`),node('a','ทะเบียน อย. (ข้อมูลอ้างอิง ไม่ใช่คำสั่งใช้ยา)',{href:reference.source,target:'_blank',rel:'noopener noreferrer'}));section.append(info);}
+      node('p',`ผู้ผลิต: ${reference.manufacturer??'ไม่ระบุในแหล่งอ้างอิง'} | กลุ่มยา: ${reference.category}`),node('p',`เลขทะเบียนอ้างอิง: ${reference.registration} | รูปแบบ: ${reference.form??'ไม่ระบุ'} | ผู้รับอนุญาต: ${reference.licenseHolder??'ไม่ระบุ'}`),node('p',`ข้อมูลทะเบียน ณ ${reference.recordAsOf??'ไม่ระบุ'} ไม่ยืนยันสถานะทะเบียนปัจจุบัน กรุณาเทียบเลขทะเบียนบนฉลาก`),node('a','ทะเบียน อย. (ข้อมูลอ้างอิง ไม่ใช่คำสั่งใช้ยา)',{href:reference.source,target:'_blank',rel:'noopener noreferrer'}));section.append(info);}
     const form=node('form',null),inputs={};section.append(form);const saved=existing?.snapshot;
     for(const key of ['label','strength','dose','instructions','times','weekdays','startDate','endDate'])inputs[key]=field(form,key,
       saved?(key==='strength'||key==='dose'||key==='instructions'?saved[key]:saved.schedule[key]):item.fields[key].value);
