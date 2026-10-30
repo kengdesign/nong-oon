@@ -1,3 +1,4 @@
+import { mediaEnvironment } from './app-environment.mjs';
 import { MEDIA_CONSENT_VERSION, MEDIA_TTL_MS } from './media-policy.mjs';
 import { parseDraft } from './draft-contract.mjs';
 export const MEDIA_LEASE_MS=120_000;
@@ -84,7 +85,7 @@ export async function ingestMediaEvents(db,events,{now,providerId}){
 }
 
 export async function dispatchMediaJobs(env,now){
-  if(env.MEDIA_PROCESSING_ENABLED!=='true'||env.APP_ENV!=='staging')return {dispatched:0};
+  if(env.MEDIA_PROCESSING_ENABLED!=='true'||!mediaEnvironment(env))return {dispatched:0};
   const rows=await all(env.DB,`SELECT id FROM media_jobs WHERE (state='queued' OR (state='processing' AND lease_until<=?))
     AND dispatch_at<=? AND expires_at>? AND attempts<3 AND provider_id=? AND ${liveJobSQL} ORDER BY created_at LIMIT 10`,[now,now,now,env.MEDIA_PROVIDER_ID,now]);
   let dispatched=0;
@@ -115,7 +116,7 @@ export async function saveMediaDraft(db,job,input,now){
 }
 
 export async function cleanupMedia(env,now){
-  if(env.APP_ENV!=='staging'||env.MEDIA_API_ENABLED!=='true'||!mediaNow(now))return {deleted:0};
+  if(!mediaEnvironment(env)||env.MEDIA_API_ENABLED!=='true'||!mediaNow(now))return {deleted:0};
   await batch(env.DB,[stmt(env.DB,`UPDATE media_jobs SET state=CASE WHEN state IN ('confirmed','cancelled','failed') THEN state ELSE 'expired' END,
     draft_json=NULL,message_id=NULL,updated_at=? WHERE (state IN ('queued','processing','awaiting_review') OR draft_json IS NOT NULL OR message_id IS NOT NULL)
     AND (expires_at<=? OR NOT ${liveJobSQL})`,[now,now,now]),

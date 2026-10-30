@@ -1,3 +1,4 @@
+import { mediaEnvironment } from './app-environment.mjs';
 import {providerReady} from './media-providers.mjs';
 import {lookupDrugReference} from './drug-reference.mjs';
 import {json} from './http.mjs';
@@ -11,7 +12,7 @@ async function body(request){
 }
 export async function handleMediaApi(request,env,{actorId,now=Date.now()}={}){
   try{
-    if(env.APP_ENV!=='staging'||env.MEDIA_API_ENABLED!=='true')return json(503,{error:'MEDIA_DISABLED'});
+    if(!mediaEnvironment(env)||env.MEDIA_API_ENABLED!=='true')return json(503,{error:'MEDIA_DISABLED'});
     if(!PROVIDERS[env.MEDIA_PROVIDER_ID])return json(503,{error:'MEDIA_PROVIDER_NOT_CONFIGURED'});
     const path=new URL(request.url).pathname,method=request.method;
     const m=/^\/api\/media\/patients\/([A-Za-z0-9_-]{1,128})(?:\/(.*))?$/.exec(path);

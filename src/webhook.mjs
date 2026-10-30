@@ -1,3 +1,4 @@
+import { mediaEnvironment } from './app-environment.mjs';
 import { projectEvents, persistEvents } from './ingestion.mjs';
 import { handleScheduled } from './maintenance.mjs';
 import { handleAuth, authenticate, requireCsrf, AuthError } from './auth.mjs';
@@ -59,7 +60,7 @@ async function verified(bytes, signature, secret) {
 }
 async function route(request, env = {}, context = {}) {
   const path = new URL(request.url).pathname;
-  if (path === '/health' && request.method === 'GET') return json(200, { status: 'staging', deliveryEnabled: deliveryWindowOpen(env) });
+  if (path === '/health' && request.method === 'GET') return json(200, { status: env.APP_ENV === 'production' ? 'production' : 'staging', deliveryEnabled: deliveryWindowOpen(env) });
   if (path === '/api/session' && request.method === 'GET') {
     const features = { sharingEnabled: env.SELF_CARE_ONLY !== 'true', careEnabled: env.CARE_API_ENABLED === 'true', schedulerEnabled: env.SCHEDULER_ENABLED === 'true',
       deliveryEnabled: deliveryWindowOpen(env),
@@ -121,7 +122,7 @@ async function route(request, env = {}, context = {}) {
     try { await processLineEvents(env.DB, Date.now()); }
     catch { return json(503, { error: 'INBOX_PROCESSING_UNAVAILABLE' }); }
   }
-  if (env.MEDIA_API_ENABLED === 'true' && env.APP_ENV === 'staging') {
+  if (env.MEDIA_API_ENABLED === 'true' && mediaEnvironment(env)) {
     try { await ingestMediaEvents(env.DB, payload.events, {now:Date.now(),providerId:env.MEDIA_PROVIDER_ID}); }
     catch { return json(503, {error:'MEDIA_INTAKE_UNAVAILABLE'}); }
     // Durable intake already succeeded. Queue promptly; cron remains recovery if
@@ -143,7 +144,7 @@ export async function handleRequest(request, env = {}, context = {}) {
 }
 export default { fetch: handleRequest, queue:handleMediaQueue, async scheduled(event,env,context) {
   const result=await handleScheduled(event,env,context);
-  if(env.APP_ENV==='staging' && env.MEDIA_API_ENABLED==='true') {
+  if(mediaEnvironment(env) && env.MEDIA_API_ENABLED==='true') {
     try {await recoverMedia(env,Date.now());}
     catch {console.warn(JSON.stringify({task:'media_recovery',outcome:'failed'}));}
   }
