@@ -228,8 +228,10 @@ async function withdrawConsent(db, patientId, actorId, now) {
     statement(db, `UPDATE medication_schedules SET active=0,version=(SELECT current_version FROM care_schedules WHERE patient_id=?),updated_at=?
       WHERE patient_id=? AND ${guard}`, [patientId, now, patientId, ...args]),
     audit(db, patientId, actorId, 'consent_withdrawn', patientId, null, now, guard, args),
+    // D1 change counts can include trigger effects; certify this mutation inside the batch.
+    statement(db, 'SELECT id FROM patients WHERE id=? AND mutation_id=? AND revoked_at=?', [patientId, mutation, now]),
   ]);
-  if (!changed(result[0])) fail(404, 'PATIENT_NOT_FOUND');
+  if (result[7]?.results?.length !== 1) fail(404, 'PATIENT_NOT_FOUND');
   return json(200, { withdrawn: true }, patientId);
 }
 
