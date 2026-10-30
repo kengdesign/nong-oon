@@ -24,3 +24,32 @@ export function printedReferenceEvidence(lines){
  }
  return found.length===1?found[0]:null;
 }
+
+// Suggestions only: a similarity score is not a probability or verified identity.
+const distance=(a,b)=>{
+ let row=Array.from({length:b.length+1},(_,i)=>i);
+ for(let i=0;i<a.length;i++){
+  const next=[i+1];
+  for(let j=0;j<b.length;j++)next.push(Math.min(next[j]+1,row[j+1]+1,row[j]+(a[i]===b[j]?0:1)));
+  row=next;
+ }
+ return row[b.length];
+};
+export function suggestDrugReference(lines,observedStrength){
+ if(typeof observedStrength!=='string')return null;
+ const tokens=lines.filter(l=>/^[A-Za-z][A-Za-z -]{4,49}(?:\s+\d{1,4})?[®™]?$/u.test(l)&&!isKnownManufacturer(l));
+ const ranked=records.filter(r=>strength(r.strength)===strength(observedStrength)).map(r=>{
+  let score=0,evidence=null;
+  for(const line of tokens)for(const alias of r.aliases){
+   const a=normal(alias),b=normal(line);
+   // Printed numbers must agree; never repair a strength or release formulation.
+   if((a.match(/\d+/gu)??[]).join(',')!==(b.match(/\d+/gu)??[]).join(','))continue;
+   const s=1-distance(a,b)/Math.max(a.length,b.length);
+   if(s>score){score=s;evidence=line;}
+  }
+  return {id:r.id,name:r.tradeName,score,evidence};
+ }).sort((a,b)=>b.score-a.score);
+ const best=ranked[0];
+ if(!best||best.score<0.8||best.score-(ranked[1]?.score??0)<0.12)return null;
+ return {...best,score:Math.round(best.score*1000)/1000,requiresConfirmation:true};
+}
