@@ -1,3 +1,4 @@
+import { mediaEnvironment } from './app-environment.mjs';
 import {createMediaInfer} from './media-providers.mjs';
 import { all,batch,stmt,checked,MediaError,mediaId,claimMediaJob,mediaLeaseValid,saveMediaDraft,dispatchMediaJobs,cleanupMedia } from './media-store.mjs';
 const MAX_BYTES=5*1024*1024;
@@ -34,7 +35,7 @@ export async function readLineMedia(messageId,kind,token,{fetcher=fetch}={}){
 // infer is a server-installed adapter (tests inject a deterministic fake).
 // Provider calls additionally require an explicit provider gate and bindings.
 export async function processMediaJob(env,jobId,{clock=Date.now,fetcher=fetch,infer}={}){
-  if(env.APP_ENV!=='staging'||env.MEDIA_PROCESSING_ENABLED!=='true'||env.MEDIA_API_ENABLED!=='true')return {outcome:'disabled'};
+  if(!mediaEnvironment(env)||env.MEDIA_PROCESSING_ENABLED!=='true'||env.MEDIA_API_ENABLED!=='true')return {outcome:'disabled'};
   if(!mediaId(jobId))return {outcome:'invalid'};
   infer??=createMediaInfer(env,{fetcher});
   if(typeof infer!=='function')return {outcome:'provider_not_ready'};
@@ -73,7 +74,7 @@ export async function handleMediaQueue(batchMessages,env,options={}){
   }
 }
 export async function recoverMedia(env,now){
-  if(env.MEDIA_API_ENABLED!=='true'||env.APP_ENV!=='staging')return {disabled:true};
+  if(env.MEDIA_API_ENABLED!=='true'||!mediaEnvironment(env))return {disabled:true};
   await batch(env.DB,[stmt(env.DB,`UPDATE media_jobs SET state='failed',last_code='MEDIA_ATTEMPTS_EXHAUSTED',draft_json=NULL,message_id=NULL,
     updated_at=? WHERE state IN ('queued','processing') AND attempts>=3 AND (lease_until IS NULL OR lease_until<=?)`,[now,now])]);
   const cleanup=await cleanupMedia(env,now);const dispatch=await dispatchMediaJobs(env,now);

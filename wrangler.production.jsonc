@@ -1,0 +1,113 @@
+{
+  "name": "nong-oon-production",
+  "main": "src/webhook.mjs",
+  "compatibility_date": "2026-10-25",
+  "account_id": "c5f673e7bdf271485603029e19f42f49",
+  "workers_dev": false,
+  "preview_urls": false,
+  "limits": {
+    "cpu_ms": 50
+  },
+  "triggers": {
+    "crons": [
+      "17 * * * *",
+      "*/5 * * * *"
+    ]
+  },
+  "assets": {
+    "directory": "./public",
+    "run_worker_first": [
+      "/webhook/*",
+      "/health",
+      "/auth/*",
+      "/api/*"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "nong-oon-production",
+      "database_id": "df4e0065-5f21-4dbf-a050-02a16b5f2698",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "invocation_logs": false,
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": false
+    }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "PATIENT_CLOCK",
+        "class_name": "PatientClock"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1-patient-clock",
+      "new_sqlite_classes": [
+        "PatientClock"
+      ]
+    }
+  ],
+  "keep_vars": false,
+  "r2_buckets": [
+    {
+      "binding": "MEDIA_R2",
+      "bucket_name": "nong-oon-production-media"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "MEDIA_QUEUE",
+        "queue": "nong-oon-production-media"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "nong-oon-production-media",
+        "max_batch_size": 1,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "max_concurrency": 1,
+        "retry_delay": 60,
+        "dead_letter_queue": "nong-oon-production-media-dlq"
+      }
+    ]
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "routes": [
+    {
+      "pattern": "nongoon.com",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "APP_ENV": "production",
+    "APP_ORIGIN": "https://nongoon.com",
+    "SELF_CARE_ONLY": "true",
+    "CARE_API_ENABLED": "true",
+    "SERVICE_ADMIN_ENABLED": "false",
+    "SCHEDULER_ENABLED": "false",
+    "DELIVERY_ENABLED": "false",
+    "LIVE_LINE_RECIPIENTS": "[]",
+    "INGESTION_ENABLED": "true",
+    "SYNTHETIC_INGESTION_ENABLED": "false",
+    "RETENTION_ENABLED": "true",
+    "PRIVATE_RETENTION_ENABLED": "true",
+    "MEDIA_API_ENABLED": "true",
+    "MEDIA_PROCESSING_ENABLED": "true",
+    "MEDIA_PROVIDER_ENABLED": "true",
+    "MEDIA_PROVIDER_ID": "cloudflare-whisper-google-vision-v1"
+  }
+}
