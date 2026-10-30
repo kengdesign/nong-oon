@@ -5,6 +5,14 @@ import {measureSample} from '../acceptance-media/quality.mjs';
 import {runCleanupAcceptance} from '../scripts/media-cleanup-acceptance.mjs';
 const ref='ชื่อยา: SYNTHETIC ONLY\nความแรง: TEST\nจำนวนต่อครั้ง: TEST\nวิธีใช้: ทดสอบเท่านั้น\nเวลา: 08:00\nวัน: 0,1,2,3,4,5,6\nวันที่เริ่ม: 2026-10-28\nลักษณะการใช้: ตามเวลา';
 const sample={kind:'image',reference:ref,base64:btoa('123456789012'),contentType:'image/png',review:{scope:'full',humanReviewed:true,referenceDraft:JSON.parse(draftFromText(ref,'printed_label'))}};
+test('private transcript capture requires both service and request opt-in',async()=>{
+ const fetcher=async()=>Response.json({responses:[{fullTextAnnotation:{text:ref}}]});
+ for(const [enabled,requested] of [[false,true],[true,false],[true,true]]){
+  const r=await measureSample({GOOGLE_VISION_API_KEY:'test',QUALITY_PRIVATE_CAPTURE:String(enabled)},{...sample,captureTranscript:requested},{fetcher});
+  assert.equal(r.privateTranscript,enabled&&requested?ref:undefined);
+  assert.equal(Boolean(r.privateDraft),enabled&&requested);
+ }
+});
 test('quality compares known fields, one OCR call, aggregate output only',async()=>{
   let calls=0;const r=await measureSample({GOOGLE_VISION_API_KEY:'test'},sample,{fetcher:async()=>{calls++;return Response.json({responses:[{fullTextAnnotation:{text:ref}}]});}});
   assert.equal(calls,1);assert.equal(r.screen,'passed');assert.equal(r.knownFields,8);assert.equal(r.pilotReady,false);assert.doesNotMatch(JSON.stringify(r),/SYNTHETIC ONLY|ทดสอบเท่านั้น/);

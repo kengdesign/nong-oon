@@ -23,6 +23,14 @@ export function draftFromText(text,sourceKind){
   // repeated printed brand directly beside a strength/ingredient line. No
   // medicine dictionary, spelling repair, patient-name or regimen inference.
   if(sourceKind==='printed_label'){
+    // A supplement product title is literal identity evidence even when no
+    // ingredient strength is printed. Net weight is never a strength.
+    const titles=lines.map(line=>({line,match:line.match(/^([A-Z][A-Za-z0-9®™ -]{2,79})\s+Dietary Supplement$/u)})).filter(x=>x.match);
+    const names=[...new Set(titles.map(x=>x.match[1].trim()))];
+    if(names.length===1&&fields.label.value===null&&!lines.some(l=>/^ชื่อยา\s*[:：]/u.test(l))){
+      fields.label={value:names[0],evidence:titles[0].line};
+      issues.add('ambiguous');
+    }else if(names.length>1){issues.add('conflicting');}
     const brand=/^[A-Z][A-Za-z0-9-]{2,39}(?:\s+\d{1,4})?(?:[®™])?$/u;
     const strength=/^(?:[A-Za-z][A-Za-z -]{1,60}\s+)?(\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|มก\.))$/iu;
     const pairs=[];
