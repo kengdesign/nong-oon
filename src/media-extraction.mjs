@@ -75,7 +75,8 @@ export function draftFromText(text,sourceKind){
   if(instructionLines.length>1){
     fields.instructions={value:null,evidence:null};issues.add('conflicting');
   }else if(instructionLines.length===1){
-    const line=instructionLines[0];
+    const first=instructionLines[0],following=lines[lines.indexOf(first)+1];
+    const line=following&&/^(?:ก่อนนอน|(?:ก่อน|หลัง|พร้อม)อาหาร(?:เช้า|กลางวัน|เย็น)?)$/u.test(following)?first+' '+following:first;
     if(fields.instructions.value!==null&&fields.instructions.value!==line){
       fields.instructions={value:null,evidence:null};issues.add('conflicting');
     }else if(!issues.has('conflicting')&&line.length<=500){
