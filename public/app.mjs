@@ -122,17 +122,17 @@ function renderLogin() {
     text('p', 'การตอบรับเป็นสิ่งที่ผู้ใช้รายงาน ไม่ใช่หลักฐานว่าทานยาจริง และการไม่ตอบรับไม่ใช่การวินิจฉัยเหตุฉุกเฉิน', 'muted'));
 }
 function profileForm() {
-  const name = el('input', { name: 'displayName', autocomplete: 'nickname', maxlength: '80', required: true, placeholder: 'ชื่อที่อยากให้เรียก' });
+  const name = el('input', { name: 'displayName', autocomplete: 'nickname', maxlength: '80', required: true, placeholder: 'เช่น เก่ง หรือชื่อเล่นที่อยากให้เรียก' });
   const consent = el('input', { type: 'checkbox', required: true, name: 'consent' });
-  const submit = el('button', { type: 'submit', class: 'primary' }, 'สร้างพื้นที่ดูแลของฉัน');
+  const submit = el('button', { type: 'submit', class: 'primary' }, 'บันทึกและเริ่มเพิ่มยา');
   return el('form', { class: 'form', onsubmit: event => {
     event.preventDefault();
     if (!consent.checked || !name.value.trim()) return;
     task(async () => {
       const result = await api('/api/patients', { method: 'POST', body: { displayName: name.value.trim(), consent: true, consentVersion: state.session.consentVersion || '2026-10-26' } });
-      closeDialog(); await loadPatients(result.patient?.id); notify('สร้างพื้นที่ดูแลแล้ว เริ่มเพิ่มตารางยาได้เลย');
+      closeDialog(); await loadPatients(result.patient?.id); notify('บันทึกข้อมูลแล้ว เริ่มเพิ่มตารางยาได้เลย');
     }, submit);
-  } }, el('label', {}, 'ชื่อที่ใช้ในพื้นที่ดูแล', name), text('p', 'สร้างสำหรับข้อมูลของคุณเอง การเข้าถึงข้อมูลของผู้อื่นต้องใช้รหัสเชิญจากเจ้าของข้อมูล', 'hint'),
+  } }, el('label', {}, 'ชื่อของคุณ', name), text('p', 'เริ่มจากข้อมูลของคุณ แล้วเพิ่มยาและเวลารับประทานในขั้นตอนถัดไป การเข้าถึงข้อมูลของผู้อื่นต้องใช้รหัสเชิญจากเจ้าของข้อมูล', 'hint'),
     el('label', { class: 'check' }, consent, el('span', {}, 'ฉันยินยอมให้น้องอุ่นใช้ข้อมูลบัญชี ตารางยา และการตอบรับของฉัน เพื่อให้บริการดูแลตามที่ฉันเลือก ฉันสามารถถอนความยินยอมได้ ', el('a', { href: '/privacy.html', target: '_blank', rel: 'noopener' }, 'อ่านรายละเอียด'))), submit);
 }
 function acceptInviteForm() {
@@ -145,7 +145,7 @@ function acceptInviteForm() {
 }
 function renderOnboarding() {
   view.replaceChildren(el('section', { class: 'welcome' }, el('div', {}, text('p', 'ยินดีต้อนรับสู่น้องอุ่น', 'eyebrow'), text('h1', 'เริ่มดูแลกันได้จากตรงนี้')), button('ออกจากระบบ', logout, 'secondary compact')), ...[serviceNotice()].filter(Boolean),
-    card('สร้างพื้นที่ดูแลของฉัน', [profileForm()]), ...(sharingEnabled() ? [card('ได้รับคำเชิญจากคนในครอบครัว?', [acceptInviteForm()])] : []));
+    card('เริ่มตั้งค่าการกินยา', [profileForm()]), ...(sharingEnabled() ? [card('ได้รับคำเชิญจากคนในครอบครัว?', [acceptInviteForm()])] : []));
 }
 function selectedPath(suffix = '') { return `/api/patients/${encodeURIComponent(state.patient.id)}${suffix}`; }
 function showTab(tab) { state.tab = tab; renderDashboard(); }
@@ -156,7 +156,7 @@ function renderDashboard() {
   const nav = el('nav', { class: 'tabs', 'aria-label': 'พื้นที่ดูแล' }, ...[['today', 'รอบยา'], ['meds', 'ตารางยา'], ['family', 'ผู้ดูแล'], ['settings', 'ตั้งค่า']].filter(([id]) => id !== 'family' || sharingEnabled()).map(([id, label]) => button(label, () => showTab(id), '', { 'aria-current': state.tab === id ? 'page' : null })));
   const panel = state.tab === 'today' ? todayPanel() : state.tab === 'meds' ? schedulesPanel(owner) : state.tab === 'family' ? familyPanel(owner) : settingsPanel(owner);
   view.replaceChildren(el('section', { class: 'welcome' }, el('div', {}, text('p', dateLabel(Date.now()), 'eyebrow'), text('h1', 'วันนี้ ดูแลกันให้อุ่นใจ')), el('div', { class: 'account-actions' }, button('รีเฟรช', event => task(() => loadPatients(state.patient.id), event.currentTarget), 'secondary compact'), button('ออกจากระบบ', logout, 'secondary compact'))), ...[serviceNotice()].filter(Boolean),
-    el('div', { class: 'patient-bar' }, el('label', {}, 'พื้นที่ดูแลของ', selector), !state.patients.some(p => p.role === 'owner') ? button('สร้างพื้นที่ของฉัน', () => openDialog('สร้างพื้นที่ดูแลของฉัน', profileForm()), 'secondary compact') : null, sharingEnabled() ? button('รับรหัสเชิญ', () => openDialog('รับคำเชิญผู้ดูแล', acceptInviteForm()), 'secondary compact') : null), nav, panel);
+    el('div', { class: 'patient-bar' }, el('label', {}, 'พื้นที่ดูแลของ', selector), !state.patients.some(p => p.role === 'owner') ? button('เริ่มตั้งค่าการกินยา', () => openDialog('เริ่มตั้งค่าการกินยา', profileForm()), 'secondary compact') : null, sharingEnabled() ? button('รับรหัสเชิญ', () => openDialog('รับคำเชิญผู้ดูแล', acceptInviteForm()), 'secondary compact') : null), nav, panel);
 }
 function todayPanel() {
   const panel = el('section', { 'aria-labelledby': 'today-title' });
