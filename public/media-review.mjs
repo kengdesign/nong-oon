@@ -59,6 +59,7 @@ async function openJob(id){stopRefresh();const path=base()+`/jobs/${encodeURICom
   view.draft.items.forEach((item,i)=>{const existing=view.reviews.find(r=>r.itemIndex===i);if(existing?.confirmed){container.append(card(`รายการ ${i+1}`,node('p','บันทึกแล้ว')));return;}
     const section=card(`รายการ ${i+1}`);container.append(section);
     section.append(node('pre',Object.entries(item.fields).map(([key,f])=>`${words[key]}: ${f.value===null?'อ่านไม่ได้ / ไม่ระบุ':Array.isArray(f.value)?f.value.join(','):f.value}${f.evidence?'\nข้อความต้นทาง: '+f.evidence:''}`).join('\n\n')));
+    if(item.notes?.length)section.append(card('บันทึกช่วยตรวจ — ไม่ใช่ข้อมูลที่ยืนยันแล้ว',...item.notes.map(n=>node('p',`${n.text}\nข้อความต้นทาง: ${n.evidence}`))));
     if(item.fields.useMode.value==='as_needed'||view.draft.sourceKind==='pill_photo'){section.append(node('p',errors.MEDIA_REGIMEN_UNSUPPORTED));return;}
     if(item.issues.length)section.append(node('p','มีข้อมูลที่อ่านไม่ชัดหรืออาจซ้ำ กรุณาตรวจจากฉลากและแก้ให้ถูกต้อง',{class:'media-note'}));
     section.append(node('p','ข้อมูลที่ไม่พบจะเว้นว่าง คุณกรอกหรือแก้ไขได้จากฉลากหรือคำแนะนำที่ตรวจสอบแล้ว ระบบไม่เติมจำนวนและเวลาให้เอง'));

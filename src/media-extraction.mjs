@@ -1,4 +1,4 @@
-import {isKnownManufacturer,printedReferenceEvidence} from './drug-reference.mjs';
+import {isKnownManufacturer,printedReferenceEvidence,suggestDrugReference} from './drug-reference.mjs';
 import {DRAFT_FIELDS,validateDraft,assessCommand} from './draft-contract.mjs';
 // Bounded explicit fields and verbatim instruction excerpts, never dosage inference.
 const labels={label:'ชื่อยา',strength:'ความแรง',dose:'จำนวนต่อครั้ง',instructions:'วิธีใช้',times:'เวลา',weekdays:'วัน',startDate:'วันที่เริ่ม',endDate:'วันที่สิ้นสุด',useMode:'ลักษณะการใช้'};
@@ -23,6 +23,14 @@ export function draftFromText(text,sourceKind){
   // repeated printed brand directly beside a strength/ingredient line. No
   // medicine dictionary, spelling repair, patient-name or regimen inference.
   if(sourceKind==='printed_label'){
+    // A supplement product title is literal identity evidence even when no
+    // ingredient strength is printed. Net weight is never a strength.
+    const titles=lines.map(line=>({line,match:line.match(/^([A-Z][A-Za-z0-9®™ -]{2,79})\s+Dietary Supplement$/u)})).filter(x=>x.match);
+    const names=[...new Set(titles.map(x=>x.match[1].trim()))];
+    if(names.length===1&&fields.label.value===null&&!lines.some(l=>/^ชื่อยา\s*[:：]/u.test(l))){
+      fields.label={value:names[0],evidence:titles[0].line};
+      issues.add('ambiguous');
+    }else if(names.length>1){issues.add('conflicting');}
     const brand=/^[A-Z][A-Za-z0-9-]{2,39}(?:\s+\d{1,4})?(?:[®™])?$/u;
     const strength=/^(?:[A-Za-z][A-Za-z -]{1,60}\s+)?(\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|มก\.))$/iu;
     const pairs=[];
@@ -82,7 +90,28 @@ export function draftFromText(text,sourceKind){
     fields.times={value:null,evidence:null};issues.add('unsupported_regimen');
   }
   if(DRAFT_FIELDS.some(k=>fields[k].value===null))issues.add('unreadable');
-  const draft={schemaVersion:1,sourceKind,items:[{fields,issues:[...issues]}]};
+  const notes=[];
+  if(sourceKind==='printed_label'){
+    const suggestion=!lines.some(l=>/^ชื่อยา\s*[:：]/u.test(l))?suggestDrugReference(lines,fields.strength.value):null;
+    if(suggestion&&fields.label.value!==null&&fields.label.value.replace(/\s/gu,'').toUpperCase()!==suggestion.name.replace(/\s/gu,'').toUpperCase()){fields.label={value:null,evidence:null};issues.add('conflicting');}
+    if(suggestion&&fields.label.value===null){notes.push({kind:'name_candidate',text:`ชื่อเสนอจากฐานอ้างอิง: ${suggestion.name} (similarity ${suggestion.score}; ต้องตรวจฉลากยืนยัน)`,evidence:suggestion.evidence});issues.add('ambiguous');}
+    // Retain only botanical excerpts, never the whole hospital/patient header.
+    for(const line of lines){
+      const herb=line.match(/(?:ใบ|ราก|ดอก|ผล|เปลือก|เมล็ด)[ก-๙]{2,50}(?:แคปซูล|ผง|สกัด)/u);
+      if(fields.label.value===null&&herb&&notes.length<8)notes.push({kind:'herb',text:herb[0],evidence:herb[0]});
+    }
+  }
+  if(sourceKind==='voice'){
+    // Keep ASR spelling verbatim. A symptom phrase is not a drug identity.
+    const joined=lines.join(' '),start=joined.search(/(?:รับประทาน|รับทาน|ทานครั้งละ|ใช้ภายนอก)/u);
+    if(start>=0){
+      const excerpt=joined.slice(start).trim();
+      if(excerpt.length<=500&&fields.instructions.value===null&&!instructionLines.length){fields.instructions={value:excerpt,evidence:excerpt};issues.add('ambiguous');}
+      const prefix=joined.slice(0,start).trim();
+      if(prefix&&prefix.length<=500&&/(?:อาการ|แก้|ปวด|ไอ|ท้อง)/u.test(prefix)){notes.push({kind:'symptom',text:prefix,evidence:prefix});issues.add('ambiguous');}
+    }
+  }
+  const draft={schemaVersion:1,sourceKind,items:[{fields,issues:[...issues],...(notes.length?{notes}:{} )}]};
   if(!validateDraft(draft).ok)throw Error('MEDIA_EXTRACTION_REJECTED');
   return JSON.stringify(draft);
 }

@@ -449,6 +449,40 @@
                 "unsupported_regimen"
               ]
             }
+          },
+          "notes": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "text",
+                "evidence"
+              ],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "name_candidate",
+                    "herb",
+                    "symptom"
+                  ]
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "pattern": "^(?!.*[\\u0000-\\u001f\\u007f])\\S(?:[\\s\\S]*\\S)?$"
+                },
+                "evidence": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "pattern": "^(?!.*[\\u0000-\\u001f\\u007f])\\S(?:[\\s\\S]*\\S)?$"
+                }
+              }
+            }
           }
         }
       }

@@ -120,7 +120,7 @@ export async function cleanupMedia(env,now){
     draft_json=NULL,message_id=NULL,updated_at=? WHERE (state IN ('queued','processing','awaiting_review') OR draft_json IS NOT NULL OR message_id IS NOT NULL)
     AND (expires_at<=? OR NOT ${liveJobSQL})`,[now,now,now]),
     stmt(env.DB,`DELETE FROM media_reviews WHERE job_id IN (SELECT id FROM media_jobs WHERE state IN ('confirmed','cancelled','expired','failed') OR expires_at<=?)`,[now])]);
-  const rows=await all(env.DB,`SELECT id,object_key FROM media_jobs WHERE (state IN ('confirmed','cancelled','expired','failed') OR expires_at<=?)
+  const rows=await all(env.DB,`SELECT id,object_key,expires_at,lease_until FROM media_jobs WHERE (state IN ('confirmed','cancelled','expired','failed') OR expires_at<=?)
     AND (lease_until IS NULL OR lease_until<=?) ORDER BY updated_at,id LIMIT 20`,[now,now]);
   let failed=false;
   for(const row of rows){
@@ -128,13 +128,27 @@ export async function cleanupMedia(env,now){
     // orphan the random object key. Do not drop manifests before a rollout policy exists.
     try{
       await env.MEDIA_R2.delete(row.object_key);
-      checked(await stmt(env.DB,'UPDATE media_jobs SET updated_at=? WHERE id=?',[now,row.id]).run());
+      // Keep replay protection until original expiry. Only completed writers (no lease)
+      // may lose their deletion manifest; interrupted writers keep it for retries.
+      if(row.expires_at<=now && row.lease_until===null && typeof env.MEDIA_R2.head==='function'){
+        if(await env.MEDIA_R2.head(row.object_key)!==null)throw Error('OBJECT_REMAINS');
+        await batch(env.DB,[
+          stmt(env.DB,'DELETE FROM media_reviews WHERE job_id=?',[row.id]),
+          stmt(env.DB,'DELETE FROM media_receipts WHERE job_id=?',[row.id]),
+          stmt(env.DB,`DELETE FROM media_jobs WHERE id=? AND expires_at<=? AND lease_until IS NULL
+            AND state IN ('confirmed','cancelled','expired','failed')`,[row.id,now])]);
+      }else checked(await stmt(env.DB,'UPDATE media_jobs SET updated_at=? WHERE id=?',[now,row.id]).run());
     }catch{
       // A broken object must not prevent other eligible objects being erased.
       // Retain its manifest and surface only a fixed, private-data-free code.
       failed=true;
     }
   }
+  await batch(env.DB,[
+    stmt(env.DB,'DELETE FROM media_unsent WHERE source_hash IN (SELECT source_hash FROM media_unsent WHERE expires_at<=? LIMIT 100)',[now]),
+    stmt(env.DB,'DELETE FROM media_budget WHERE rowid IN (SELECT rowid FROM media_budget WHERE day<? LIMIT 100)',[Math.floor((now+25200000)/86400000)-1]),
+    stmt(env.DB,`DELETE FROM media_consents WHERE rowid IN (SELECT rowid FROM media_consents WHERE expires_at<=?
+      AND NOT EXISTS(SELECT 1 FROM media_jobs j WHERE j.patient_id=media_consents.patient_id AND j.actor_id=media_consents.actor_id) LIMIT 100)`,[now])]);
   if(failed)reject('MEDIA_CLEANUP_INCOMPLETE',503);
   return {deleted:rows.length};
 }

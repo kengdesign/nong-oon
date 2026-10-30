@@ -19,3 +19,6 @@ export const draftJsonSchema = {
 };
 export const commandJsonSchema = {$schema:draftJsonSchema.$schema,title:'Nong Oon untrusted command v1',
   ...object({schemaVersion:{const:1},intent:{enum:[...INTENTS]},targetLabel:{oneOf:[{type:'null'},string(120)]},ambiguous:{type:'boolean'}})};
+
+// Optional review-only context; never schedule fields or identity confirmation.
+draftJsonSchema.properties.items.items.properties.notes={type:'array',maxItems:8,items:object({kind:{enum:['name_candidate','herb','symptom']},text:string(500),evidence:string(500)})};

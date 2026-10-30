@@ -22,11 +22,13 @@ export function validateDraft(value) {
   if(Object.hasOwn(value,'sourceText')&&(value.sourceKind!=='printed_label'||typeof value.sourceText!=='string'||!value.sourceText.trim()||value.sourceText.length>8000||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value.sourceText)))return {ok:false,errors:['INVALID_SOURCE_TEXT']};
   const errors = new Set();
   for (const item of value.items) {
-    if (!exact(item,['fields','issues']) || !exact(item.fields,DRAFT_FIELDS) ||
+    if (!(exact(item,['fields','issues'])||exact(item,['fields','issues','notes'])) || !exact(item.fields,DRAFT_FIELDS) ||
         !Array.isArray(item.issues) || item.issues.length > 8 || new Set(item.issues).size !== item.issues.length ||
         item.issues.some(v=>!['unreadable','ambiguous','conflicting','possible_duplicate','unsupported_regimen'].includes(v))) {
       errors.add('INVALID_ITEM'); continue;
     }
+    if(Object.hasOwn(item,'notes')&&(!Array.isArray(item.notes)||item.notes.length>8||
+      item.notes.some(n=>!exact(n,['kind','text','evidence'])||!['name_candidate','herb','symptom'].includes(n.kind)||!text(n.text,500)||!text(n.evidence,500))||value.sourceKind==='pill_photo'))errors.add('INVALID_NOTES');
     for (const key of DRAFT_FIELDS) {
       const field=item.fields[key];
       if (!exact(field,['value','evidence'])) {errors.add('INVALID_FIELD');continue;}
