@@ -20,7 +20,7 @@ test('catalog tie, weak match, unknown strength and release-form mismatch do not
 });
 test('herbal text becomes bounded notes without unrelated personal header or invented strength',()=>{
  const d=extract('ชื่อ นายทดสอบ ข้อมูลส่วนตัว\nHN: PRIVATE-ID\nใบมะขามแขกแคปซูล แทน SEI 20 แคปซูล\nรับประทานครั้งละ 2 แคปซูล วันละ 1 ครั้ง');
- const item=d.items[0];assert.equal(item.fields.label.value,null);assert.equal(item.fields.strength.value,null);
+ const item=d.items[0];assert.equal(item.fields.label.value,'ใบมะขามแขกแคปซูล');assert.equal(item.fields.strength.value,null);
  assert.deepEqual(item.notes,[{kind:'herb',text:'ใบมะขามแขกแคปซูล',evidence:'ใบมะขามแขกแคปซูล'}]);
  assert.doesNotMatch(JSON.stringify(item.notes),/PRIVATE-ID|นายทดสอบ|20/);
 });

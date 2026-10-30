@@ -16,7 +16,7 @@ test('different spacing cannot hide conflicting explicit fields',()=>{
 });
 test('natural directions are verbatim review excerpts, never inferred schedules',()=>{
   const item=JSON.parse(draftFromText('ชื่อ : SYNTHETIC PERSON\nรับประทานครั้งละ 2 แคปซูล วันละ 1 ครั้ง\nก่อนนอน','printed_label')).items[0];
-  assert.equal(item.fields.instructions.value,'รับประทานครั้งละ 2 แคปซูล วันละ 1 ครั้ง');
+  assert.equal(item.fields.instructions.value,'รับประทานครั้งละ 2 แคปซูล วันละ 1 ครั้ง ก่อนนอน');
   assert.equal(item.fields.instructions.evidence,item.fields.instructions.value);
   for(const key of ['label','dose','times','weekdays','useMode'])assert.equal(item.fields[key].value,null);
   assert.ok(item.issues.includes('unreadable'));

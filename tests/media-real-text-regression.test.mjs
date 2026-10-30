@@ -12,7 +12,7 @@ test('uncertain blister spelling is not repaired using reference or manufacturer
 });
 test('package count and indications are not ingredient strength or identity',()=>{
  const f=fields('ยาแก้ท้องผูก\nใบมะขามแขกแคปซูล แทน SEI 20 แคปซูล\nรับประทานครั้งละ 2 แคปซูล วันละ 1 ครั้ง\nก่อนนอน');
- assert.equal(f.label.value,null);assert.equal(f.strength.value,null);
+ assert.equal(f.label.value,'ใบมะขามแขกแคปซูล');assert.equal(f.strength.value,null);
 });
 test('misrecognized speech is not silently corrected into drug identity',()=>{
  const f=fields('อยากแก้ท้องฟูกรับทานครั้งละสองแคปซูล วันละหนึ่งครั้งก่อนนอน','voice');

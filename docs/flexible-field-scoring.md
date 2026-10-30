@@ -1,0 +1,13 @@
+# Versioned flexible reference-coverage scores
+
+Run `node scripts/evaluate-flexible-fields.mjs PRIVATE_CORPUS --blister-instructions-absent`. This replays cached prediction.txt, validates the existing human field-gold.json against reference.txt, and writes aggregate flexible-field-report.json. Providers, reference files, gold, raw predictions and prior extraction files are unchanged. No network/API call occurs.
+
+The explicit flag records the operator's source audit that this corpus's blister has no directions. It does not assume all blister packs lack directions. An absent predicted direction is excluded from the flexible denominator (not awarded 100%); an unexpected extracted direction is scored wrong. Strict three-field scores remain unchanged and separately reported. Other unknown/explicitly absent gold is distinguished from nonempty extraction matches; unexpected extraction is penalized. An all-excluded set has no score or pass.
+
+Partial product title matching currently accepts only the operator-requested Centrum -> Centrum Active expansion, marked for source review. It does not treat arbitrary medicine substrings, different release forms or dose variants as equivalent. This is a diagnostic title-coverage rule, not confirmation of interchangeable products.
+
+Instruction comparison uses bounded NFC/case/whitespace normalization, Thai digits and number words in dose/frequency phrases, and common ingest verbs. Changed quantities, frequencies, route, negation, and competing timing remain mismatches. One additional timing phrase can count as reference coverage only when the remaining instruction matches exactly; it is explicitly marked REFERENCE_COVERED_WITH_ADDITIONAL_TIMING and requires review. It is not declared semantically identical. No LLM/provider is called. Additional unsupported differences remain wrong, never fuzzily waved through.
+
+Reports record policy version, exclusions, denominator, strict/flexible results, reason codes and review requirements. A higher score from changing scoring rules is not evidence that extraction or OCR improved. Four tuning samples with modified policy do not establish production accuracy. Actual local results are unavailable until the operator runs the CLI.
+
+Release preparation: retain strict and flexible reports, review every partial/additional-detail match against source, validate independent holdout field accuracy, complete staging UI/retention/recovery acceptance, and identify a production config plus isolated bindings and rollback version. Then prepare a pinned build dry-run and deployment commands against that verified production configuration. This tool never enables LINE, deploys, or marks production ready based on >80% alone.
