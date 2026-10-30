@@ -58,6 +58,9 @@ export async function processMediaJob(env,jobId,{clock=Date.now,fetcher=fetch,in
       dispatch_at=?,updated_at=? WHERE id=? AND lease_token=? AND state='processing' RETURNING id`,
       [retry?'queued':'failed',code,clock()+60_000,clock(),job.id,job.lease_token]);
     return {outcome:retry?'retry':'failed',code};
+  }finally{
+    // No further R2 writes can originate from this invocation after it settles.
+    checked(await stmt(env.DB,'UPDATE media_jobs SET lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?',[job.id,job.lease_token]).run());
   }
 }
 export async function handleMediaQueue(batchMessages,env,options={}){

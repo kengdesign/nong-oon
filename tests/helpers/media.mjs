@@ -13,7 +13,7 @@ export async function mediaFixture(){
   return {...f,now,patientId,objects,messages,env:{DB:f.db,APP_ENV:'staging',MEDIA_API_ENABLED:'true',MEDIA_PROCESSING_ENABLED:'true',
     MEDIA_PROVIDER_ID:'google-vision-v1',LINE_CHANNEL_ACCESS_TOKEN:'fixture-token',
     MEDIA_QUEUE:{async send(v){messages.push(v);}},
-    MEDIA_R2:{async put(key,bytes,options){objects.set(key,{bytes:bytes.slice(),options});},async delete(key){objects.delete(key);},
+    MEDIA_R2:{async head(key){return objects.has(key)?{size:objects.get(key).bytes.length}:null;},async put(key,bytes,options){objects.set(key,{bytes:bytes.slice(),options});},async delete(key){objects.delete(key);},
       async get(key){const value=objects.get(key);return value?{body:value.bytes}:null;}}}};
 }
 export const mediaEvent=(now,id='123')=>({webhookEventId:`fixture_${id}`,type:'message',timestamp:now,source:{type:'user',userId:owner},message:{type:'image',id}});

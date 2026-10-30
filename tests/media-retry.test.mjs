@@ -33,7 +33,7 @@ test('saved edits block retry; expiry cleanup erases private OCR payload',async(
  const f=await ready({withText:true});try{
   await saveMediaReview(f.db,{...f.context,itemIndex:0,input:{expectedReviewVersion:0,expectedScheduleVersion:1,sourceChecked:true,issuesResolved:true,useMode:'scheduled',strength:'20 mg',dose:'synthetic',schedule:{label:'Synthetic',instructions:'Synthetic only',times:['08:00'],weekdays:[1],startDate:'2026-10-29',endDate:null}}});
   await assert.rejects(retryMediaJob(f.db,f.context));assert.equal((await readMediaJob(f.db,f.context)).reviews.length,1);
-  await cleanupMedia(f.env,f.now+86400000+MEDIA_LEASE_MS);assert.equal(f.sql.prepare('SELECT draft_json FROM media_jobs').get().draft_json,null);
+  await cleanupMedia(f.env,f.now+86400000+MEDIA_LEASE_MS);assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM media_jobs').get().n,0);
   await assert.rejects(readMediaJob(f.db,{...f.context,now:f.now+86400000+1}));
  }finally{f.close();}
 });
