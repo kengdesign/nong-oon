@@ -1,0 +1,15 @@
+import {readFileSync,writeFileSync} from 'node:fs';
+const [source,target,mode]=process.argv.slice(2);
+if(!source||!target||!['active','paused'].includes(mode))throw Error('CONFIG_ARGUMENTS_REQUIRED');
+const c=JSON.parse(readFileSync(source,'utf8').replace(/^\uFEFF/,''));
+if(c.name!=='nong-oon-production'||c.vars?.APP_ENV!=='production'||c.vars.APP_ORIGIN!=='https://nongoon.com')throw Error('WRONG_PRODUCTION_TARGET');
+const recipients=JSON.parse(c.vars.LIVE_LINE_RECIPIENTS??'null');
+if(!Array.isArray(recipients)||!recipients.length||recipients.length>10||recipients.some(x=>!/^U[0-9a-f]{32}$/.test(x)))throw Error('INVALID_EXISTING_ALLOWLIST');
+if(!c.d1_databases?.some(x=>x.binding==='DB')||!c.durable_objects?.bindings?.some(x=>x.name==='PATIENT_CLOCK'))throw Error('MISSING_PRODUCTION_BINDINGS');
+const active=mode==='active';
+c.vars.SCHEDULER_ENABLED=String(active);c.vars.DELIVERY_ENABLED=String(active);
+c.vars.CAREGIVER_DELIVERY_ENABLED=String(active);c.vars.SNOOZE_ENABLED=String(active);c.vars.LINE_POSTBACK_ENABLED='true';
+c.vars.SELF_CARE_ONLY='false';
+delete c.vars.DELIVERY_START_AT;delete c.vars.DELIVERY_STOP_AT;
+writeFileSync(target,JSON.stringify(c,null,2)+'\n');
+console.log('Phase 3 configuration prepared; existing bindings and recipient allowlist preserved.');

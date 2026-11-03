@@ -1,3 +1,4 @@
+import { handleLineDosePostbacks } from './line-dose-postback.mjs';
 import { mediaEnvironment } from './app-environment.mjs';
 import { projectEvents, persistEvents } from './ingestion.mjs';
 import { handleScheduled } from './maintenance.mjs';
@@ -62,7 +63,7 @@ async function route(request, env = {}, context = {}) {
   const path = new URL(request.url).pathname;
   if (path === '/health' && request.method === 'GET') return json(200, { status: env.APP_ENV === 'production' ? 'production' : 'staging', deliveryEnabled: deliveryWindowOpen(env) });
   if (path === '/api/session' && request.method === 'GET') {
-    const features = { sharingEnabled: env.SELF_CARE_ONLY !== 'true', careEnabled: env.CARE_API_ENABLED === 'true', schedulerEnabled: env.SCHEDULER_ENABLED === 'true',
+    const features = { voiceEnabled: env.VOICE_COMMAND_ENABLED==='true', sharingEnabled: env.SELF_CARE_ONLY !== 'true', careEnabled: env.CARE_API_ENABLED === 'true', schedulerEnabled: env.SCHEDULER_ENABLED === 'true',
       deliveryEnabled: deliveryWindowOpen(env),
       loginConfigured: /^\d{5,20}$/.test(env.LINE_LOGIN_CHANNEL_ID ?? '') && Boolean(env.LINE_LOGIN_CHANNEL_SECRET?.trim()) };
     let identity = null;
@@ -119,6 +120,8 @@ async function route(request, env = {}, context = {}) {
   if (env.INGESTION_ENABLED !== 'true' && !syntheticFixture(payload, request, env)) return json(503, { error: 'DURABLE_INGESTION_NOT_READY' });
   try { await persistEvents(env.DB, rows); } catch { return json(503, { error: 'DURABLE_INGESTION_UNAVAILABLE' }); }
   if (env.CARE_API_ENABLED === 'true') {
+    try { await handleLineDosePostbacks(env,payload.events); }
+    catch { return json(503,{error:'DOSE_POSTBACK_UNAVAILABLE'}); }
     try { await processLineEvents(env.DB, Date.now()); }
     catch { return json(503, { error: 'INBOX_PROCESSING_UNAVAILABLE' }); }
   }

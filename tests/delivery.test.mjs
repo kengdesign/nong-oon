@@ -309,3 +309,121 @@ test('lease ownership ignores D1 trigger-inclusive change counts', async () => {
     assert.equal(ownerJob(f).attempts, 1);
   } finally { f.close(); }
 });
+
+import { applyLineDosePostback,handleLineDosePostbacks } from '../src/line-dose-postback.mjs';
+import { lineNotificationMessage } from '../src/delivery.mjs';
+const tap = (job,user=owner) => ({type:'postback',source:{type:'user',userId:user},postback:{data:`dose_taken:${job.id}`},replyToken:'synthetic-reply'});
+test('reminder button -> signed identity -> persistent dose/audit -> reply; repeated taps are idempotent',async()=>{
+ const f=await fixture();try{
+ f.sql.prepare("INSERT INTO care_grants VALUES('p1',?,'report_taken',NULL)").run(owner);
+ const job=ownerJob(f);let sent;
+ await deliver(f,at('08:00'),{fetcher:async(u,o)=>{sent=JSON.parse(o.body);return new Response('{}');}},{...env,LINE_POSTBACK_ENABLED:'true'});
+ assert.equal(sent.messages[0].template.actions[0].data,`dose_taken:${job.id}`);
+ const requests=[];
+ for(let n=0;n<2;n++)await handleLineDosePostbacks({...env,DB:f.db,LINE_POSTBACK_ENABLED:'true'},[tap(job)],{now:at('08:01'),fetcher:async(u,o)=>{requests.push({u,body:JSON.parse(o.body)});return new Response('{}');}});
+ assert.equal(f.sql.prepare('SELECT status FROM dose_records WHERE dose_id=?').get(job.dose_id).status,'reported_taken');
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM dose_audit WHERE dose_id=?').get(job.dose_id).n,1);
+ assert.equal(requests[0].u,'https://api.line.me/v2/bot/message/reply');
+ assert.match(requests[0].body.messages[0].text,/บันทึกว่าทานยาแล้วเรียบร้อย/);
+ }finally{f.close();}
+});
+test('postback rejects another user, expired, future, revoked and stale rounds',async()=>{
+ for(const scenario of ['other','expired','future','revoked','stale']){
+ const f=await fixture();try{
+ f.sql.prepare("INSERT INTO care_grants VALUES('p1',?,'report_taken',NULL)").run(owner);
+ const job=ownerJob(f);
+ if(scenario==='revoked')f.sql.exec('UPDATE care_grants SET revoked_at=1');
+ if(scenario==='stale')f.sql.exec('UPDATE care_schedules SET current_version=2');
+ const now=scenario==='expired'?f.sql.prepare('SELECT expires_at FROM dose_records WHERE dose_id=?').get(job.dose_id).expires_at:scenario==='future'?at('07:59'):at('08:01');
+ const r=await applyLineDosePostback(f.db,tap(job,scenario==='other'?caregiver:owner),now);
+ assert.equal(r.ok,false,scenario);
+ assert.equal(f.sql.prepare('SELECT status FROM dose_records WHERE dose_id=?').get(job.dose_id).status,'pending');
+ }finally{f.close();}}
+});
+test('postback ignored for group source, malformed input and disabled feature',async()=>{
+ assert.equal(await applyLineDosePostback(null,{type:'postback',source:{type:'group',userId:owner}}),null);
+ assert.equal(await applyLineDosePostback(null,{type:'postback',source:{type:'user',userId:owner},postback:{data:'bad'}}),null);
+ await handleLineDosePostbacks({},[{}],{fetcher:()=>{throw Error('must not send');}});
+ assert.throws(()=>lineNotificationMessage('test','bad'));
+});
+test('enabling buttons preserves an already-attempted legacy payload and retry key',async()=>{
+ const f=await fixture();try{
+ const bodies=[];const fetcher=async(u,o)=>{bodies.push(o.body);return new Response('{}',{status:bodies.length===1?500:200});};
+ await deliver(f,at('08:00'),{fetcher});
+ await deliver(f,at('08:01'),{fetcher},{...env,LINE_POSTBACK_ENABLED:'true'});
+ assert.equal(bodies.length,2);assert.equal(bodies[0],bodies[1]);
+ }finally{f.close();}
+});
+test('reminder copy explicitly asks for a tap and fits LINE buttons limits',()=>{
+ const m=lineNotificationMessage('old preview','123e4567-e89b-42d3-a456-426614174000',at('08:00'));
+ assert.equal(m.template.actions[0].label,'กดยืนยันว่าทานแล้ว');
+ assert.ok([...m.template.actions[0].label].length<=20);
+ assert.ok([...m.template.text].length<=60);
+ assert.match(m.template.text,/กรุณากดปุ่ม/);
+ assert.match(m.altText,/กรุณากดปุ่ม/);
+});
+
+import { sendDoseConfirmation } from '../src/dose-confirmation.mjs';
+test('web confirmation requires saved owner report and reuses identical retry key and text without private labels',async()=>{
+ const f=await fixture();try{
+ f.sql.prepare("INSERT INTO care_grants VALUES('p1',?,'report_taken',NULL)").run(owner);
+ const job=ownerJob(f),config={...env,DB:f.db,LINE_POSTBACK_ENABLED:'true'};
+ let calls=[];
+ const options={fetcher:async(u,o)=>{calls.push({u,body:o.body,key:o.headers['x-line-retry-key']});return new Response('{}');}};
+ const input={patientId:'p1',doseId:job.dose_id,actorId:owner,now:at('08:01')};
+ assert.equal((await sendDoseConfirmation(config,input,options)).accepted,false);
+ await applyLineDosePostback(f.db,tap(job),at('08:01'));
+ for(let i=0;i<2;i++)assert.equal((await sendDoseConfirmation(config,input,options)).accepted,true);
+ assert.equal(calls.length,2);assert.deepEqual(calls[0],calls[1]);assert.equal(calls[0].key,job.id);
+ assert.match(JSON.parse(calls[0].body).messages[0].text,/รอบ 26 ต.ค. 08:00/);
+ assert.doesNotMatch(calls[0].body,/PRIVATE/);
+ assert.equal((await sendDoseConfirmation(config,{...input,actorId:caregiver},options)).accepted,false);
+ assert.equal((await sendDoseConfirmation({...config,LIVE_LINE_RECIPIENTS:'[]'},input,options)).accepted,false);
+ assert.equal((await sendDoseConfirmation(config,{...input,now:input.now+23*3600000},options)).accepted,false);
+ f.sql.prepare('UPDATE accounts SET blocked_at=1 WHERE actor_id=?').run(owner);
+ assert.equal((await sendDoseConfirmation(config,input,options)).accepted,false);
+ assert.equal(calls.length,2);
+ }finally{f.close();}
+});
+
+test('reply failures remain visible while redelivery keeps a single durable acknowledgement',async()=>{
+ const f=await fixture();try{
+ f.sql.prepare("INSERT INTO care_grants VALUES('p1',?,'report_taken',NULL)").run(owner);
+ const job=ownerJob(f),config={...env,DB:f.db,LINE_POSTBACK_ENABLED:'true'};
+ for(const status of [400,401,429,500]){
+   await assert.rejects(handleLineDosePostbacks(config,[tap(job)],{
+     now:at('08:01'),fetcher:async()=>new Response('{}',{status})
+   }),/REPLY_(FAILED|RETRYABLE)/);
+ }
+ await assert.rejects(handleLineDosePostbacks(config,[tap(job)],{
+   now:at('08:01'),fetcher:async()=>{throw Error('private network detail');}
+ }),/REPLY_NETWORK_FAILED/);
+ await handleLineDosePostbacks(config,[tap(job)],{
+   now:at('08:02'),fetcher:async()=>new Response('{}')
+ });
+ assert.equal(f.sql.prepare('SELECT status FROM dose_records WHERE dose_id=?').get(job.dose_id).status,'reported_taken');
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM dose_audit WHERE dose_id=?').get(job.dose_id).n,1);
+ }finally{f.close();}
+});
+
+import { handleCareApi } from '../src/care-api.mjs';
+test('taken -> delete schedule -> later reminder blocked while dose and audit history survive',async()=>{
+ const f=await fixture();try{
+ f.sql.prepare("INSERT INTO care_grants VALUES('p1',?,'report_taken',NULL)").run(owner);
+ f.sql.prepare('UPDATE medication_schedules SET times_json=? WHERE id=?').run('["08:00","18:00"]','s1');
+ await materializePatient(f.db,'p1',at('07:00'));
+ const job=ownerJob(f);
+ await applyLineDosePostback(f.db,tap(job),at('08:01'));
+ const before=f.sql.prepare('SELECT COUNT(*) n FROM dose_records').get().n;
+ const response=await handleCareApi(new Request('https://example.test/api/patients/p1/schedules/s1',{
+   method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({expectedVersion:1})
+ }),{DB:f.db},{actorId:owner,now:at('08:02')});
+ assert.equal(response.status,200);
+ let sends=0;
+ await deliver(f,at('18:00'),{fetcher:async()=>{sends++;return new Response('{}');}});
+ assert.equal(sends,0);
+ assert.equal(f.sql.prepare('SELECT COUNT(*) n FROM dose_records').get().n,before);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM dose_audit WHERE status='reported_taken'").get().n,1);
+ assert.equal(f.sql.prepare("SELECT COUNT(*) n FROM notification_outbox WHERE status IN ('pending','sending')").get().n,0);
+ }finally{f.close();}
+});

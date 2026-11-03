@@ -114,7 +114,7 @@ export async function materializePatient(db, patientId, now) {
       AND c.current_version=d.schedule_version AND m.version=d.schedule_version AND m.active=1
       AND g.revoked_at IS NULL AND a.blocked_at IS NULL AND g.role=?
       AND (?=0 OR g.actor_id=p.owner_actor_id) AND d.due_at+?>=? AND d.due_at<?
-    ON CONFLICT(patient_id,dose_id,recipient_actor_id,kind) DO NOTHING`)
+    ON CONFLICT(patient_id,dose_id,recipient_actor_id,kind,generation) DO NOTHING`)
     .bind(kind, delay, delay + LATE_WINDOW_MS, now, patientId, owner ? 'owner' : 'caregiver', owner ? 1 : 0,
       delay + LATE_WINDOW_MS, now, bangkokInstant(bangkokDay(now), '00:00') + 2 * DAY_MS);
   const results = await db.batch([doseInsert, rebindFuture, outboxInsert('reminder', true, 0), outboxInsert('caregiver_alert', false, ALERT_DELAY_MS)]);
@@ -122,7 +122,7 @@ export async function materializePatient(db, patientId, now) {
   return { dosesChanged: results[0].meta?.changes ?? 0, notificationsCreated: (results[2].meta?.changes ?? 0) + (results[3].meta?.changes ?? 0) };
 }
 
-export async function nextWake(db, patientId, now, { deliveryEnabled = true, recipients = null } = {}) {
+export async function nextWake(db, patientId, now, { deliveryEnabled = true, recipients = null, caregiverEnabled = false } = {}) {
   if (!id(patientId) || !validNow(now)) throw Error('INVALID_SCHEDULER_INPUT');
   const schedules = await activeSchedules(db, patientId);
   if (!schedules.length) return null;
@@ -156,8 +156,8 @@ export async function nextWake(db, patientId, now, { deliveryEnabled = true, rec
     const pending = await rows(db.prepare(`SELECT MIN(CASE WHEN status='sending' THEN lease_until ELSE available_at END) AS wake_at
       FROM notification_outbox JOIN accounts a ON a.actor_id=notification_outbox.recipient_actor_id
       WHERE patient_id=? AND status IN ('pending','sending') AND expires_at>?
-        AND (? IS NULL OR a.line_user_id IN (SELECT value FROM json_each(?)))`)
-      .bind(patientId, now, recipients === null ? null : JSON.stringify(recipients), JSON.stringify(recipients ?? [])));
+        AND (? IS NULL OR a.line_user_id IN (SELECT value FROM json_each(?)) OR (notification_outbox.kind='caregiver_alert' AND ?=1))`)
+      .bind(patientId, now, recipients === null ? null : JSON.stringify(recipients), JSON.stringify(recipients ?? []), caregiverEnabled ? 1 : 0));
     if (Number.isSafeInteger(pending[0]?.wake_at)) wakeTimes.push(Math.max(now + 1000, pending[0].wake_at));
   }
   return wakeTimes.length ? Math.max(now + 1000, Math.min(...wakeTimes)) : null;

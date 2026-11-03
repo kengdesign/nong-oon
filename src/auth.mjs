@@ -223,14 +223,47 @@ async function callback(request, env, now, fetcher) {
   if (saved[1].meta?.changes !== 1) fail('ACCOUNT_BLOCKED', 403);
   return redirect(`${origin}/`, [setCookie(SESSION_COOKIE, sessionToken, SESSION_TTL_MS / 1000), setCookie(LOGIN_COOKIE, '', 0)]);
 }
+async function liffLogin(request, env, now, fetcher) {
+  const origin = configured(env);
+  if (new URL(request.url).origin !== origin || request.headers.get('origin') !== origin
+    || request.headers.get('sec-fetch-site') === 'cross-site'
+    || request.headers.get('content-type')?.split(';')[0].trim() !== 'application/json')
+    fail('CSRF_REJECTED', 403);
+  await throttleLogin(request, env, now);
+  const body = await boundedJson(new Response(request.body, {headers: request.headers}));
+  if (typeof body.idToken !== 'string' || body.idToken.length < 1 || body.idToken.length > 16384)
+    fail('LOGIN_REJECTED');
+  const claims = await linePost(fetcher, 'verify', {id_token: body.idToken, client_id: env.LINE_LOGIN_CHANNEL_ID});
+  const seconds = Math.floor(now / 1000);
+  if (claims.iss !== 'https://access.line.me' || claims.aud !== env.LINE_LOGIN_CHANNEL_ID
+    || !lineId(claims.sub) || !Number.isSafeInteger(claims.exp) || claims.exp <= seconds
+    || !Number.isSafeInteger(claims.iat) || claims.iat > seconds + 60 || claims.iat > claims.exp)
+    fail('LOGIN_REJECTED');
+  const sessionToken = random(), csrf = random();
+  const statements = [
+    env.DB.prepare(`INSERT INTO accounts(actor_id,line_user_id,blocked_at,created_at)
+      VALUES(?,?,NULL,?) ON CONFLICT(actor_id) DO NOTHING`).bind(claims.sub, claims.sub, now),
+    env.DB.prepare(`INSERT INTO sessions(session_hash,actor_id,csrf,created_at,expires_at)
+      SELECT ?,actor_id,?,?,? FROM accounts WHERE actor_id=? AND line_user_id=? AND blocked_at IS NULL`)
+      .bind(await hash(sessionToken), csrf, now, now + SESSION_TTL_MS, claims.sub, claims.sub),
+  ];
+  const previous = cookie(request, SESSION_COOKIE);
+  if (previous) statements.push(env.DB.prepare('DELETE FROM sessions WHERE session_hash=?').bind(await hash(previous)));
+  const saved = await env.DB.batch(statements);
+  if (!Array.isArray(saved) || saved.length !== statements.length || saved.some(v => v.success !== true))
+    fail('AUTH_UNAVAILABLE', 503);
+  if (saved[1].meta?.changes !== 1) fail('ACCOUNT_BLOCKED', 403);
+  return json(200, {status: 'signed_in'}, [setCookie(SESSION_COOKIE, sessionToken, SESSION_TTL_MS / 1000)]);
+}
 /** Known auth route -> Response; unrelated route -> null. No side effects on unknown routes. */
 export async function handleAuth(request, env = {}, { now = Date.now(), fetcher = fetch } = {}) {
   const path = new URL(request.url).pathname;
-  const methods = { '/auth/login': 'GET', '/auth/callback': 'GET', '/auth/logout': 'POST' };
+  const methods = { '/auth/login': 'GET', '/auth/callback': 'GET', '/auth/logout': 'POST', '/auth/liff': 'POST' };
   if (!Object.hasOwn(methods, path)) return null;
   if (request.method !== methods[path]) return new Response(null, { status: 405, headers: { allow: methods[path] } });
   validNow(now);
   try {
+    if (path === '/auth/liff') return await liffLogin(request, env, now, fetcher);
     if (path === '/auth/login') return await login(request, env, now);
     if (path === '/auth/callback') return await callback(request, env, now, fetcher);
     const identity = await authenticate(request, env, { now });

@@ -1,6 +1,7 @@
 import {isKnownManufacturer,printedReferenceEvidence,suggestDrugReference} from './drug-reference.mjs';
 import {DRAFT_FIELDS,validateDraft,assessCommand} from './draft-contract.mjs';
 // Bounded explicit fields and verbatim instruction excerpts, never dosage inference.
+const asciiDigits = value => value.replace(/[๐-๙]/gu, digit => String(digit.charCodeAt(0)-0x0e50));
 const labels={label:'ชื่อยา',strength:'ความแรง',dose:'จำนวนต่อครั้ง',instructions:'วิธีใช้',times:'เวลา',weekdays:'วัน',startDate:'วันที่เริ่ม',endDate:'วันที่สิ้นสุด',useMode:'ลักษณะการใช้'};
 export function draftFromText(text,sourceKind){
   if(typeof text!=='string'||text.length>8000||!['voice','printed_label'].includes(sourceKind))throw Error('MEDIA_TEXT_REJECTED');
@@ -12,8 +13,9 @@ export function draftFromText(text,sourceKind){
     if(found.length!==1){if(found.length>1)issues.add('conflicting');continue;}
     const line=found[0],raw=line.match(pattern)[1].trim();if(!raw||line.length>500)continue;
     let value=raw;
-    if(key==='times')value=raw.split(',').map(s=>s.trim());
-    if(key==='weekdays')value=raw.split(',').map(s=>/^\s*[0-6]\s*$/.test(s)?Number(s):NaN);
+    if(key==='times')value=asciiDigits(raw).split(',').map(s=>s.trim());
+    if(key==='weekdays')value=asciiDigits(raw).split(',').map(s=>/^\s*[0-6]\s*$/.test(s)?Number(s):NaN);
+    if(key==='startDate'||key==='endDate')value=asciiDigits(raw);
     if(key==='useMode')value=raw==='ตามเวลา'?'scheduled':raw==='เมื่อมีอาการ'?'as_needed':null;
     if(value===null)continue;
     const candidate={...fields,[key]:{value,evidence:line}},draft={schemaVersion:1,sourceKind,items:[{fields:candidate,issues:[]}]};

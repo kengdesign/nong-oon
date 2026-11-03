@@ -72,6 +72,7 @@ function reviewSnapshot(input,now){
 export async function saveMediaReview(db,{jobId,patientId,actorId,itemIndex,input,now,providerId}){
   if(!index(itemIndex))reject('INVALID_MEDIA_ITEM');
   const view=await readMediaJob(db,{jobId,patientId,actorId,now,providerId});
+  if(view.draft.voiceIntent && view.draft.voiceIntent!=='unknown')reject('VOICE_COMMAND_NOT_SCHEDULE',409);
   if(!view.draft.items[itemIndex])reject('INVALID_MEDIA_ITEM');
   // PRN and pill-only paths are deliberately not converted to fixed schedules.
   if(view.draft.items[itemIndex].fields.useMode.value==='as_needed'||view.draft.sourceKind==='pill_photo')reject('MEDIA_REGIMEN_UNSUPPORTED',422);
@@ -103,6 +104,7 @@ export async function confirmMediaReview(db,{jobId,patientId,actorId,itemIndex,i
     return {scheduleId:r.schedule_id,replayed:true};
   }
   const view=await readMediaJob(db,{jobId,patientId,actorId,now,providerId});
+  if(view.draft.voiceIntent && view.draft.voiceIntent!=='unknown')reject('VOICE_COMMAND_NOT_SCHEDULE',409);
   const review=view.reviews.find(r=>r.item_index===itemIndex);
   if(!review||review.confirmed_at!==null||review.version!==input.expectedReviewVersion||review.expires_at<=now)reject('MEDIA_REVIEW_CHANGED',409);
   if(view.currentVersion!==input.expectedScheduleVersion)reject('MEDIA_SCHEDULE_CHANGED',409);

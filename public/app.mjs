@@ -1,3 +1,10 @@
+import { createFeedback } from './feedback.mjs';
+import { actionableDoses } from './dose-focus.mjs';
+import { navigationFromUrl } from './liff-client.mjs';
+import { nextContact } from './family-call.mjs';
+const familyAttempts = new Map();
+let doseFocusId = null;
+let doseReceipt = null;
 // Credentials and care records stay in memory. The server decides identity and permissions.
 const $ = selector => document.querySelector(selector);
 const view = $('#view');
@@ -6,7 +13,7 @@ const dialogContent = $('#dialog-content');
 const feedback = $('#feedback');
 const timezone = 'Asia/Bangkok';
 const dayNames = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
-const state = { session: null, patients: [], patient: null, schedules: [], doses: [], members: [], currentVersion: 1, tab: 'today', busy: false, showHistory: false };
+const state = { session: null, patients: [], patient: null, schedules: [], doses: [], members: [], currentVersion: 1, ...navigationFromUrl(location.href), busy: false, libraryHistory: false };
 const sharingEnabled = () => state.session?.features?.sharingEnabled === true;
 const labels = { pending: 'รอการตอบรับ', reported_taken: 'รายงานว่าทานแล้ว', reported_not_taken: 'รายงานว่ายังไม่ทาน', cancelled: 'ยกเลิกรอบนี้แล้ว' };
 const errors = {
@@ -29,6 +36,8 @@ const errors = {
   CARE_DISABLED: 'พื้นที่ดูแลยังไม่เปิดใช้งาน โปรดลองใหม่ภายหลัง',
   SERVICE_DISABLED: 'พื้นที่ดูแลยังไม่เปิดใช้งาน โปรดลองใหม่ภายหลัง',
   QUOTA_EXCEEDED: 'จำนวนรายการถึงขีดจำกัดแล้ว กรุณาพักรายการที่ไม่ใช้ก่อน',
+  VOICE_DISABLED: 'ระบบคำสั่งเสียงยังไม่เปิดใช้งาน',
+  INVALID_CONTACTS: 'กรุณาใส่ชื่อและเบอร์โทรให้ครบ สูงสุด 3 คน',
   RATE_LIMITED: 'ทำรายการถี่เกินไป กรุณารอสักครู่แล้วลองใหม่',
 };
 function el(tag, attrs = {}, ...children) {
@@ -45,7 +54,8 @@ function el(tag, attrs = {}, ...children) {
 }
 function button(text, onClick, className = 'secondary', attrs = {}) { return el('button', { type: 'button', class: className, onclick: onClick, ...attrs }, text); }
 function text(tag, value, className) { return el(tag, { class: className || '', text: value }); }
-function notify(message, error = false) { feedback.textContent = message; feedback.classList.toggle('error', error); }
+const feedbackController = createFeedback(feedback);
+function notify(message, error = false) { feedbackController.show(message, error); }
 function todayDate() {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
   return ['year', 'month', 'day'].map(key => parts.find(p => p.type === key).value).join('-');
@@ -81,7 +91,7 @@ async function task(fn, control) {
   try { await fn(); }
   catch (error) {
     notify(error.message || 'ทำรายการไม่สำเร็จ กรุณาลองใหม่', true);
-    if (error.status === 401) { state.session = null; state.patient = null; state.patients = []; closeDialog(); await start(); }
+    if (error.status === 401) { familyAttempts.clear(); doseReceipt = null; doseFocusId = null; document.body.classList.remove('family-call-mode', 'dose-focus-mode', 'app-shell-mode'); state.session = null; state.patient = null; state.patients = []; closeDialog(); await start(); }
     else if ((error.status === 403 || error.status === 409) && state.session?.authenticated) {
       closeDialog(); await loadPatients().catch(() => {});
     }
@@ -98,7 +108,17 @@ function confirmDialog(title, description, label, action) {
   const ok = button(label, event => task(async () => { await action(); closeDialog(); }, event.currentTarget), 'danger');
   openDialog(title, text('p', description), el('div', { class: 'dialog-actions' }, button('กลับไปก่อน', closeDialog), ok));
 }
-function card(title, children, className = '') { return el('section', { class: `card ${className}` }, title ? text('h2', title) : null, ...children); }
+function card(title, children, className = '') {
+  const section=el('section',{class:`card ${className}`},title ? text('h2',title) : null);
+  let controls=null;
+  for(const child of children.flat()) {
+    if(child instanceof Element && child.matches('button,a')) {
+      if(!controls){controls=el('div',{class:'control-stack'});section.append(controls);}
+      controls.append(child);
+    } else {controls=null;if(child!==null && child!==undefined)section.append(child);}
+  }
+  return section;
+}
 function updateBadge() {
   const features = state.session?.features;
   const badge = $('#service-badge');
@@ -135,6 +155,23 @@ function profileForm() {
   } }, el('label', {}, 'ชื่อของคุณ', name), text('p', 'เริ่มจากข้อมูลของคุณ แล้วเพิ่มยาและเวลารับประทานในขั้นตอนถัดไป การเข้าถึงข้อมูลของผู้อื่นต้องใช้รหัสเชิญจากเจ้าของข้อมูล', 'hint'),
     el('label', { class: 'check' }, consent, el('span', {}, 'ฉันยินยอมให้น้องอุ่นใช้ข้อมูลบัญชี ตารางยา และการตอบรับของฉัน เพื่อให้บริการดูแลตามที่ฉันเลือก ฉันสามารถถอนความยินยอมได้ ', el('a', { href: '/privacy.html', target: '_blank', rel: 'noopener' }, 'อ่านรายละเอียด'))), submit);
 }
+async function copyInvitation(value, field) {
+  try {
+    if (!navigator.clipboard?.writeText) throw new Error('CLIPBOARD_UNAVAILABLE');
+    await navigator.clipboard.writeText(value);
+    notify('คัดลอกแล้ว ส่งให้ผู้ดูแลเป็นการส่วนตัวได้เลย');
+  } catch {
+    field.focus(); field.select();
+    notify('คัดลอกอัตโนมัติไม่ได้ กรุณากดค้างที่รหัสที่เลือกไว้ แล้วเลือกคัดลอก');
+  }
+}
+function invitationDialog(result) {
+  const code = el('textarea', { readonly: true, rows: '3', class: 'code-box', 'aria-label': 'รหัสเชิญผู้ดูแล', spellcheck: 'false' }, result.code);
+  const message = `คำเชิญดูแลร่วมกันในน้องอุ่น\nเปิดน้องอุ่นจากเมนูใน LINE แล้วเลือก ครอบครัว → รับคำเชิญ\nรหัสเชิญ: ${result.code}\nใช้ได้ครั้งเดียว โปรดอย่าส่งต่อ`;
+  return el('div', {}, text('p', 'ส่งให้เฉพาะผู้ดูแลที่คุณไว้ใจ ผู้รับต้องเข้าใช้ด้วยบัญชี LINE ของตนเอง แล้วกดรับคำเชิญ'), code,
+    text('p', `หมดอายุ ${dateLabel(result.expiresAt)} เวลา ${timeLabel(result.expiresAt)} น. · ใช้ได้ครั้งเดียว`, 'hint'),
+    el('div', { class: 'actions' }, button('คัดลอกรหัส', () => copyInvitation(result.code, code), 'primary'), button('คัดลอกข้อความเชิญ', () => copyInvitation(message, code), 'secondary'), button('เสร็จแล้ว', closeDialog)));
+}
 function acceptInviteForm() {
   const code = el('input', { name: 'invite', autocomplete: 'off', spellcheck: 'false', maxlength: '64', minlength: '64', pattern: '[a-fA-F0-9]{64}', required: true, placeholder: 'วางรหัสเชิญที่ได้รับ' });
   const submit = el('button', { type: 'submit', class: 'secondary' }, 'รับคำเชิญ');
@@ -148,22 +185,142 @@ function renderOnboarding() {
     card('เริ่มตั้งค่าการกินยา', [profileForm()]), ...(sharingEnabled() ? [card('ได้รับคำเชิญจากคนในครอบครัว?', [acceptInviteForm()])] : []));
 }
 function selectedPath(suffix = '') { return `/api/patients/${encodeURIComponent(state.patient.id)}${suffix}`; }
-function showTab(tab) { state.tab = tab; renderDashboard(); }
-function renderDashboard() {
-  const owner = state.patient.role === 'owner';
-  if (!sharingEnabled() && state.tab === 'family') state.tab = 'today';
-  const selector = el('select', { 'aria-label': 'เลือกพื้นที่ดูแล', onchange: event => task(() => loadPatient(event.target.value), event.target) }, ...state.patients.map(p => el('option', { value: p.id, selected: p.id === state.patient.id ? 'selected' : null }, `${p.displayName}${p.role === 'owner' ? ' · ฉัน' : ' · ผู้ดูแล'}`)));
-  const nav = el('nav', { class: 'tabs', 'aria-label': 'พื้นที่ดูแล' }, ...[['today', 'รอบยา'], ['meds', 'ตารางยา'], ['family', 'ผู้ดูแล'], ['settings', 'ตั้งค่า']].filter(([id]) => id !== 'family' || sharingEnabled()).map(([id, label]) => button(label, () => showTab(id), '', { 'aria-current': state.tab === id ? 'page' : null })));
-  const panel = state.tab === 'today' ? todayPanel() : state.tab === 'meds' ? schedulesPanel(owner) : state.tab === 'family' ? familyPanel(owner) : settingsPanel(owner);
-  view.replaceChildren(el('section', { class: 'welcome' }, el('div', {}, text('p', dateLabel(Date.now()), 'eyebrow'), text('h1', 'วันนี้ ดูแลกันให้อุ่นใจ')), el('div', { class: 'account-actions' }, button('รีเฟรช', event => task(() => loadPatients(state.patient.id), event.currentTarget), 'secondary compact'), button('ออกจากระบบ', logout, 'secondary compact'))), ...[serviceNotice()].filter(Boolean),
-    el('div', { class: 'patient-bar' }, el('label', {}, 'พื้นที่ดูแลของ', selector), !state.patients.some(p => p.role === 'owner') ? button('เริ่มตั้งค่าการกินยา', () => openDialog('เริ่มตั้งค่าการกินยา', profileForm()), 'secondary compact') : null, sharingEnabled() ? button('รับรหัสเชิญ', () => openDialog('รับคำเชิญผู้ดูแล', acceptInviteForm()), 'secondary compact') : null), nav, panel);
+function showTab(tab) { feedbackController.clear(); state.tab = tab; renderDashboard(); }
+function mainNavigation() {
+  return el('nav',{class:'app-bottom-nav','aria-label':'เมนูหลัก'},...[
+    ['today','clock','รอบยา'],['meds','appointment','ตารางยา'],['help','family','ครอบครัว'],['settings','settings','ตั้งค่า']
+  ].map(([tab,icon,label])=>{
+    const control=button('',()=>{state.showHistory=false;showTab(tab);window.scrollTo(0,0);},'',{'aria-current':(state.tab===tab || (state.tab==='family' && tab==='help'))?'page':null,'aria-label':label});
+    control.append(el('span',{},el('img',{src:'/icons/'+icon+'.svg',alt:'','aria-hidden':'true',class:'nav-icon',width:'32',height:'32'}),el('span',{},label)));
+    return control;
+  }));
 }
-function todayPanel() {
+function renderDashboard() {
+  const owner=state.patient.role==='owner';
+  document.body.classList.remove('family-call-mode','dose-focus-mode');
+  document.body.classList.add('app-shell-mode');
+  const panel=state.tab==='today' ? (state.showHistory ? todayPanel(true,false) : doseFocusPanel()) : state.tab==='meds' ? medicationLibraryPanel(owner) : state.tab==='help' ? helpPanel() : state.tab==='family' && sharingEnabled() ? familyPanel(owner) : settingsPanel(owner);
+  const header=el('header',{class:'app-page-heading'},text('h1',state.tab==='meds'?'ตารางยา':state.tab==='help'?'ครอบครัว':state.tab==='settings'?'ตั้งค่า':state.showHistory?'ประวัติการตอบรับ':'รอบยา'),button('กลับไปแอพไลน์',returnToChat,'secondary compact'));
+  const selector=state.patients.length>1 ? el('label',{},'พื้นที่ดูแลของ',el('select',{'aria-label':'เลือกพื้นที่ดูแล',onchange:e=>task(async()=>{doseReceipt=null;await loadPatient(e.target.value);},e.target)},...state.patients.map(p=>el('option',{value:p.id,selected:p.id===state.patient.id?'selected':null},p.displayName)))) : null;
+  view.replaceChildren(header,...[selector,serviceNotice()].filter(Boolean),panel,mainNavigation());
+}
+function emergencyContactsPanel(editable = false) {
+  const panel=card(editable ? 'ผู้ติดต่อครอบครัว ลำดับ 1–3' : 'ต้องการโทรหาใคร?', [text('p',editable ? 'เพิ่มผู้ติดต่อได้สูงสุด 3 คน' : 'ติดต่อไม่ได้? วางสาย แล้วกลับมาเลือกคนถัดไป')]);
+  const patientId=state.patient.id;
+  const path=`/api/patients/${encodeURIComponent(patientId)}/emergency-contacts`;
+  const content=el('div',{class:editable ? 'contact-editor' : 'contact-list'},text('p','กำลังโหลดผู้ติดต่อ…'));panel.append(content);
+  (async()=>{
+    const data=await api(path); content.replaceChildren();
+    if(editable){
+      const inputs=Array.from({length:3},(_,i)=>{
+        const contact=data.contacts[i],name=el('input',{value:contact?.name??'',maxlength:80,autocomplete:'off'}),phone=el('input',{value:contact?.phone??'',type:'tel',inputmode:'tel',maxlength:24,autocomplete:'off'});
+        content.append(el('div',{class:'field'},el('label',{},`ชื่อผู้ติดต่อ ${i+1}`,name),el('label',{},'เบอร์โทรศัพท์',phone)));
+        return {name,phone};
+      });
+      content.append(button('บันทึกผู้ติดต่อ',event=>task(async()=>{
+        const contacts=inputs.map(c=>({name:c.name.value.trim(),phone:c.phone.value.trim()})).filter(c=>c.name||c.phone);
+        await api(path,{method:'PUT',body:{contacts}});notify('บันทึกผู้ติดต่อแล้ว');
+      },event.currentTarget),'primary'));
+    }else{
+      if(!data.contacts.length)content.append(text('p','ยังไม่มีผู้ติดต่อ กรุณาเพิ่มในตั้งค่า'));
+      const suggestion = el('p', {class:'call-suggestion', 'aria-live':'polite'});
+      const links=[];
+      function updateSuggestion(){
+        const attempt=familyAttempts.get(patientId);
+        const next=nextContact(data.contacts,attempt);
+        suggestion.textContent=next ? `หากติดต่อคนก่อนหน้าไม่ได้ โทรหาคนที่ ${next.priority} — ${next.name}` : attempt && Date.now()-attempt.at<30*60*1000 ? 'เลือกโทรซ้ำ หรือเลือกผู้ติดต่อคนอื่นได้' : '';
+        for(const [contact,link] of links)link.classList.toggle('suggested',contact===next);
+      }
+      content.append(suggestion);
+      for(const c of data.contacts){
+        const link=el('a',{class:'button contact-call',href:`tel:${c.phone}`,'aria-label':`โทรหา ${c.name} ผู้ติดต่อลำดับ ${c.priority}`,onclick:()=>{
+          familyAttempts.set(patientId,{priority:c.priority,phone:c.phone,at:Date.now()});
+          updateSuggestion();
+        }},el('span',{class:'contact-call-icon','aria-hidden':'true'},el('img',{src:'/phone-family.png',alt:'',width:38,height:38})),el('span',{class:'contact-call-copy'},text('span',`ผู้ติดต่อลำดับ ${c.priority}`,'contact-call-order'),text('strong',`โทรหา ${c.name}`),text('span',c.phone,'contact-call-number')));
+        links.push([c,link]);content.append(link);
+      }
+      updateSuggestion();
+      if(!data.contacts.length)content.append(button('เพิ่มผู้ติดต่อ',()=>showTab('settings'),'primary'));
+      content.append(text('p','ระบบไม่ทราบผลการโทร การแจ้งเตือน LINE ใช้เฉพาะผู้ดูแลที่รับคำเชิญและยังมีสิทธิ์','small'));
+    }
+  })().catch(()=>{content.replaceChildren(text('p','โหลดผู้ติดต่อไม่สำเร็จ กรุณาลองใหม่หรือติดต่อด้วยช่องทางเดิม'));});
+  return panel;
+}
+function returnToChat() {
+  const sdk=globalThis.liff;
+  if(sdk?.isInClient?.()) {
+    try { sdk.closeWindow(); return; } catch {}
+  }
+  notify('หากหน้านี้ยังเปิดอยู่ ให้กด × ของ LINE เพื่อกลับแชต');
+}
+function helpPanel() {
+  return el('section', {class:'family-call-screen'},
+
+    text('p',`พื้นที่ดูแลของ ${state.patient.displayName}`,'small'),
+    emergencyContactsPanel(),
+    ...(sharingEnabled() ? [card('ดูแลร่วมกับครอบครัว',[text('p','เชิญผู้ดูแล ดูสมาชิก และถอนสิทธิ์ได้ที่นี่'),button('จัดการผู้ดูแล',()=>showTab('family'),'primary'),button('รับคำเชิญ',()=>openDialog('รับคำเชิญผู้ดูแล',acceptInviteForm()),'secondary')])] : []));
+}
+function voiceCommandPanel(){
+  const result=el('div',{'aria-live':'polite'});
+  return card('คำสั่งเสียงจากแชต LINE',[
+    text('p','ต้องเปิดความยินยอมประมวลผลเสียงก่อน จากนั้นส่งข้อความเสียงสั้นในแชตน้องอุ่น แล้วกดตรวจเสียงล่าสุด ไม่บันทึกว่าทานยาแล้วอัตโนมัติ'),
+    el('a',{href:'/media-review.html'},'เปิดหน้าความยินยอมและไฟล์เสียง'),
+    button('ยินยอมใช้เสียงตรวจคำสั่ง 24 ชั่วโมง',event=>task(async()=>{await api(selectedPath('/voice/consent'),{method:'PUT',body:{acknowledge:true}});notify('เปิดคำสั่งเสียง 24 ชั่วโมงแล้ว ส่งเสียงใหม่ในแชต LINE ได้');},event.currentTarget),'secondary'),
+    button('ตรวจเสียงล่าสุด',event=>task(async()=>{
+      const response=await api(selectedPath('/voice/latest'));
+      await loadPatient(state.patient.id);
+      if(response.intent==='propose_taken')openDialog('ยืนยันรอบที่ทานแล้ว',el('div',{},text('p','ระบบได้ยินคำสั่งทานยาแล้ว กรุณาตรวจรอบยาและกดทานแล้วในรอบที่ตรงกัน'),todayPanel(false,false)));
+      else if(response.intent==='read_status')openDialog('สถานะที่บันทึกวันนี้',el('div',{},text('p','เป็นข้อมูลที่ผู้ใช้บันทึก ไม่ใช่การยืนยันว่าได้รับประทานจริง'),todayPanel(false,false)));
+      else notify('ยังไม่พบคำสั่งที่รองรับ ลองพูดว่า ทานยาแล้ว หรือ ทานยาไปแล้วหรือยัง',true);
+    },event.currentTarget),'secondary'),result]);
+}
+async function confirmDoseInChat(doseId) {
+  let message;
+  try {
+    const result=await api(selectedPath(`/doses/${encodeURIComponent(doseId)}/confirmation`),{method:'POST',body:{}});
+    if(doseReceipt?.doseId===doseId)doseReceipt.retryConfirmation=!result.accepted;
+    message=result.accepted ? 'ส่งข้อความยืนยันเข้า LINE แล้ว' : 'บันทึกแล้ว แต่ยังส่งยืนยันเข้า LINE ไม่สำเร็จ กดส่งอีกครั้งได้';
+  } catch { if(doseReceipt?.doseId===doseId)doseReceipt.retryConfirmation=true; message='บันทึกแล้ว แต่ยังส่งยืนยันเข้า LINE ไม่สำเร็จ กดส่งอีกครั้งได้'; }
+  if(doseReceipt?.doseId===doseId){doseReceipt.confirmation=message;renderDashboard();}
+}
+function doseFocusPanel() {
+  const panel = el('section', {class: 'dose-focus-screen', 'aria-labelledby': 'dose-focus-title'});
+  panel.setAttribute('aria-label','บันทึกการทานยา'); panel.removeAttribute('aria-labelledby');
+  if (doseReceipt && doseReceipt.patientId === state.patient.id) {
+    panel.append(el('div', {class:'dose-focus-card', role:'status'}, text('div','✓','dose-success-icon'), text('h2','บันทึกว่าทานแล้วเรียบร้อย'), text('p',doseReceipt.label), text('p',`รอบ ${timeLabel(doseReceipt.dueAt)} น. · บันทึก ${timeLabel(doseReceipt.changedAt)} น.`), text('p',doseReceipt.confirmation || (state.patient.role==='owner' ? 'กำลังส่งข้อความยืนยันไป LINE' : 'บันทึกการตอบรับแล้ว'),'small'), doseReceipt.retryConfirmation ? button('ส่งยืนยันเข้า LINE อีกครั้ง',event=>task(()=>confirmDoseInChat(doseReceipt.doseId),event.currentTarget),'secondary compact') : null, button('ดูรอบที่เหลือ',()=>{doseReceipt=null;doseFocusId=null;renderDashboard();},'secondary')));
+  } else {
+    const doses = actionableDoses(state.doses, state.currentVersion, Date.now());
+    const dose = doses.find(d=>d.doseId===doseFocusId) || doses[0];
+    if (dose) {
+      doseFocusId=dose.doseId;
+      const index=doses.indexOf(dose);
+      const article=el('div',{class:'dose-focus-card'},text('div',`${timeLabel(dose.dueAt)} น.`,'time'),text('p',dateLabel(dose.dueAt),'small'),text('h2',dose.label || 'รอบยาตามตาราง'),dose.instructions ? text('p',dose.instructions,'instructions') : null,text('p','รอคุณกดบันทึก','dose-status'));
+      if(doses.length>1) article.append(el('div',{class:'dose-focus-pager'},button('ก่อนหน้า',()=>{doseFocusId=doses[index-1].doseId;renderDashboard();},'secondary compact',{disabled:index===0}),text('span',`${index+1} / ${doses.length}`),button('ถัดไป',()=>{doseFocusId=doses[index+1].doseId;renderDashboard();},'secondary compact',{disabled:index===doses.length-1})),text('p','ตรวจและบันทึกทีละรายการ เฉพาะที่ทานแล้ว','small'));
+      article.append(el('div',{class:'dose-focus-action'},button('กดบันทึกว่าทานแล้ว',event=>task(async()=>{
+        const patientId=state.patient.id;
+        const result=await api(selectedPath(`/doses/${encodeURIComponent(dose.doseId)}/report`),{method:'POST',body:{type:'report_taken',commandId:crypto.randomUUID(),scheduleVersion:dose.scheduleVersion}});
+        dose.status=result.status; dose.changedAt=result.changedAt;
+        doseReceipt={patientId,doseId:dose.doseId,label:dose.label || 'รอบยาตามตาราง',dueAt:dose.dueAt,changedAt:result.changedAt || Date.now()};
+        feedback.textContent='';
+        renderDashboard();
+        if(state.patient.role==='owner')await confirmDoseInChat(dose.doseId);
+      },event.currentTarget),'primary'),button('กลับโดยไม่บันทึก',returnToChat,'secondary')));
+      panel.append(article);
+    } else {
+      const upcoming=state.doses.filter(d=>d.status==='pending' && d.scheduleVersion===state.currentVersion && d.dueAt>Date.now()).sort((a,b)=>a.dueAt-b.dueAt)[0];
+      panel.append(el('div',{class:'dose-focus-card',role:'status'},text('h2','ไม่มีรอบที่รอให้บันทึกขณะนี้'),text('p',upcoming ? `รอบถัดไป ${dateLabel(upcoming.dueAt)} เวลา ${timeLabel(upcoming.dueAt)} น.` : 'ดูตารางยาหรือประวัติได้จากเมนูด้านล่าง')));
+    }
+  }
+  panel.append(button('ดูประวัติ',()=>{state.showHistory=true;renderDashboard();},'secondary compact'));
+  return panel;
+}
+function todayPanel(history = state.showHistory, includeVoice = true) {
   const panel = el('section', { 'aria-labelledby': 'today-title' });
-  const doses = state.doses.filter(d => state.showHistory || isToday(d.dueAt)).sort((a, b) => a.dueAt - b.dueAt);
+  const doses = state.doses.filter(d => history || isToday(d.dueAt)).sort((a, b) => a.dueAt - b.dueAt);
   const taken = doses.filter(d => d.status === 'reported_taken').length;
-  panel.append(el('div', { class: 'section-heading' }, el('div', {}, text('h2', state.showHistory ? 'การตอบรับล่าสุด' : 'รอบยาวันนี้'), text('p', `รายงานว่าทานแล้ว ${taken} / ${doses.length} รอบ`, 'summary')), button(state.showHistory ? 'ดูวันนี้' : 'ดูรายการล่าสุด', () => { state.showHistory = !state.showHistory; renderDashboard(); }, 'secondary compact')));
+  panel.append(el('div', { class: 'section-heading' }, el('div', {}, text('h2', history ? 'การตอบรับล่าสุด' : 'รอบยาวันนี้'), text('p', `รายงานว่าทานแล้ว ${taken} / ${doses.length} รอบ`, 'summary')), button(history ? 'ดูวันนี้' : 'ดูรายการล่าสุด', () => { state.showHistory = !history; state.tab = 'today'; renderDashboard(); }, 'secondary compact')));
   panel.querySelector('h2').id = 'today-title';
+  if(includeVoice && !history && state.session.features?.voiceEnabled)panel.append(voiceCommandPanel());
   panel.append(text('p', 'สถานะแสดงสิ่งที่ผู้ใช้รายงาน กรุณาตรวจชื่อยาและฉลากก่อนบันทึก เวลาแสดงตามประเทศไทย', 'muted'));
   if (!doses.length) {
     const haveSchedules = state.schedules.some(s => s.active);
@@ -177,21 +334,26 @@ function todayPanel() {
     const future = pending && now < dose.dueAt;
     const label = stale && pending ? 'ตารางเดิม · รับคำตอบไม่ได้' : expired ? 'พ้นช่วงรับคำตอบ' : future ? 'ยังไม่ถึงเวลา' : labels[dose.status] || 'กำลังตรวจสถานะ';
     const className = dose.status === 'reported_taken' ? 'taken' : dose.status === 'reported_not_taken' ? 'not-taken' : dose.status === 'cancelled' ? 'cancelled' : '';
-    const article = el('article', { class: 'dose' }, el('div', { class: 'dose-head' }, el('div', {}, text('div', timeLabel(dose.dueAt), 'time'), text('h3', dose.label || 'รอบยาตามตาราง'), state.showHistory ? text('p', dateLabel(dose.dueAt), 'small') : null), text('span', label, `dose-status ${className}`)));
+    const article = el('article', { class: 'dose' }, el('div', { class: 'dose-head' }, el('div', {}, text('div', timeLabel(dose.dueAt), 'time'), text('h3', dose.label || 'รอบยาตามตาราง'), history ? text('p', dateLabel(dose.dueAt), 'small') : null), text('span', label, `dose-status ${className}`)));
     if (stale) article.append(text('p', 'ตารางเดิม · เก็บไว้เป็นประวัติ ไม่ใช้เป็นรอบเตือนปัจจุบัน', 'hint'));
     if (dose.instructions) article.append(text('p', dose.instructions, 'instructions'));
     if (dose.changedAt) article.append(text('p', `บันทึก ${timeLabel(dose.changedAt)} น. · ${dateLabel(dose.changedAt)}`, 'hint'));
-    if (pending && !stale && !expired && !future) article.append(el('div', { class: 'actions' }, ...[['report_taken', 'ทานแล้ว', 'primary'], ['report_not_taken', 'ยังไม่ทาน', 'secondary']].map(([type, title, cls]) => button(title, event => task(async () => {
+    if (pending && !stale && !expired && !future) article.append(el('div', { class: 'actions' }, ...[['report_taken', '✓ ทานยาแล้ว', 'primary'], ['report_not_taken', 'ยังไม่ทาน', 'secondary']].map(([type, title, cls]) => button(title, event => task(async () => {
       await api(selectedPath(`/doses/${encodeURIComponent(dose.doseId)}/report`), { method: 'POST', body: { type, commandId: crypto.randomUUID(), scheduleVersion: dose.scheduleVersion } });
-      await loadPatient(state.patient.id); notify(type === 'report_taken' ? 'บันทึกว่าทานแล้วเรียบร้อย' : 'บันทึกว่ายังไม่ทานเรียบร้อย');
+      await loadPatient(state.patient.id); notify(type === 'report_taken' ? 'บันทึกว่าทานแล้วเรียบร้อย · ตรวจเวลาได้ที่รายการนี้' : 'บันทึกว่ายังไม่ทานเรียบร้อย');
     }, event.currentTarget), cls, { 'aria-label': `${title} สำหรับ ${dose.label || 'รอบยา'} เวลา ${timeLabel(dose.dueAt)}` }))));
     panel.append(article);
   }
   return panel;
 }
+function medicationLibraryPanel(owner) {
+  return schedulesPanel(owner);
+}
+
 function schedulesPanel(owner) {
-  const panel = el('section', { 'aria-labelledby': 'meds-title' }, el('div', { class: 'section-heading' }, text('h2', 'ตารางยา'), owner ? button('+ เพิ่มตาราง', () => scheduleDialog(), 'primary compact') : null), text('p', 'ใส่เวลาและวิธีใช้ตามฉลากหรือคำสั่งผู้ประกอบวิชาชีพ ระบบไม่คำนวณหรือแนะนำขนาดยา', 'muted'));
+  const panel = el('section', { class:'page-stack', 'aria-labelledby': 'meds-title' }, el('div', { class: 'section-heading' }, text('h2', 'ตารางยา'), owner ? button('+ เพิ่มตาราง', () => scheduleDialog(), 'primary compact') : null), text('p', 'ใส่เวลาและวิธีใช้ตามฉลากหรือคำสั่งผู้ประกอบวิชาชีพ ระบบไม่คำนวณหรือแนะนำขนาดยา', 'muted'));
   panel.querySelector('h2').id = 'meds-title';
+  panel.append(button('สรุป / พิมพ์ตารางและประวัติ', event => task(printCareSummary, event.currentTarget), 'secondary'));
   if (!owner) panel.append(text('p', 'คุณมีสิทธิ์ดูและบันทึกการตอบรับ เจ้าของข้อมูลเป็นผู้แก้ไขตารางยา', 'owner-only-note'));
   if (!state.schedules.length) panel.append(empty('ยังไม่มีตารางยา', 'เตรียมฉลากยา แล้วเพิ่มชื่อยา วิธีใช้ และเวลาที่ตรวจสอบแล้ว', owner ? button('เพิ่มตารางแรก', () => scheduleDialog(), 'primary') : null));
   for (const schedule of state.schedules) {
@@ -203,6 +365,7 @@ function schedulesPanel(owner) {
       await api(selectedPath(`/schedules/${encodeURIComponent(id)}`), { method: 'PUT', body: { ...body, active: !schedule.active, expectedVersion: state.currentVersion } });
       await loadPatient(state.patient.id); notify(schedule.active ? 'พักตารางแล้ว รอบเก่าจะไม่ส่งเตือนเพิ่ม' : 'เปิดตารางแล้ว');
     }), 'secondary compact')));
+    if(owner)content.push(button('ลบตารางยา',()=>confirmDialog('ลบตารางยานี้?',`ลบ ${schedule.label} ออกจากตารางและหยุดเตือน เก็บประวัติการตอบรับเดิมไว้`, 'ยืนยันลบตารางยา',async()=>{await api(selectedPath(`/schedules/${encodeURIComponent(schedule.id)}`),{method:'DELETE',body:{expectedVersion:state.currentVersion}});await loadPatient(state.patient.id);notify('ลบตารางยาแล้ว');}),'danger compact'));
     panel.append(card(null, content));
   }
   return panel;
@@ -245,11 +408,19 @@ function scheduleDialog(schedule) {
   openDialog(schedule ? 'แก้ไขตารางยา' : 'เพิ่มตารางยา', form);
 }
 function familyPanel(owner) {
+  const inviteStatus = el('p', {class:'family-invite-status', role:'status', 'aria-live':'polite'});
   const panel = el('section', { 'aria-labelledby': 'family-title' }, text('h2', 'ดูแลไปด้วยกัน'), text('p', 'ผู้ดูแลที่ได้รับคำเชิญจะเห็นตารางยาและสถานะการตอบรับ เจ้าของข้อมูลเลือกและถอนสิทธิ์ได้', 'muted'));
   panel.querySelector('h2').id = 'family-title';
   if (!owner) { panel.append(card('คุณเป็นผู้ดูแลในพื้นที่นี้', [text('p', 'คุณดูข้อมูลและบันทึกการตอบรับตามสิทธิ์ที่ได้รับ หากต้องการแก้ตารางหรือเปลี่ยนผู้ดูแล กรุณาติดต่อเจ้าของข้อมูล')])); return panel; }
   const members = state.members.filter(m => m.revokedAt === null || m.revokedAt === undefined);
   panel.append(card('คนในพื้นที่ดูแล', members.length ? members.map((member, index) => el('div', { class: 'member' }, el('div', {}, text('strong', member.role === 'owner' ? 'ฉัน · เจ้าของข้อมูล' : `ผู้ดูแล ${members.slice(0, index + 1).filter(m => m.role !== 'owner').length}`), text('p', member.actorId === state.session.actorId ? 'บัญชีของคุณ' : `รหัสบัญชี …${member.actorId.slice(-6)}`)), member.role !== 'owner' ? button('ถอนสิทธิ์', () => confirmDialog('ถอนสิทธิ์ผู้ดูแล?', 'ผู้ดูแลบัญชีนี้จะเข้าถึงพื้นที่นี้หรือบันทึกการตอบรับไม่ได้อีก กรุณาตรวจรหัสบัญชีก่อนยืนยัน', 'ถอนสิทธิ์', async () => { await api(selectedPath(`/members/${encodeURIComponent(member.actorId)}`), { method: 'DELETE' }); await loadPatient(state.patient.id); notify('ถอนสิทธิ์ผู้ดูแลแล้ว'); }), 'danger compact') : text('span', 'เจ้าของ', 'tag'))) : [text('p', 'ยังไม่มีผู้ดูแลที่ได้รับสิทธิ์') ]));
+  panel.append(card('ยกเลิกรหัสเชิญที่ยังไม่ได้ใช้',[
+    text('p','รหัสเชิญที่สร้างไว้จะใช้เข้าร่วมไม่ได้อีก สมาชิกที่เข้าร่วมแล้วจะยังอยู่ หากต้องการนำสมาชิกออก ให้กดถอนสิทธิ์ที่รายชื่อนั้น','small'),
+    button('ยกเลิกรหัสเชิญที่ยังไม่ได้ใช้',()=>confirmDialog('ยกเลิกรหัสเชิญทั้งหมดที่ยังไม่ได้ใช้?','รหัสเก่าจะใช้เข้าร่วมไม่ได้ คุณสร้างรหัสใหม่ได้ภายหลัง','ยืนยันยกเลิกรหัส',async()=>{
+      await api(selectedPath('/invites'),{method:'DELETE'});
+      closeDialog();inviteStatus.textContent='ยกเลิกรหัสเชิญที่ยังไม่ได้ใช้แล้ว';
+    }),'danger'),inviteStatus
+  ]));
   panel.append(card('ชวนคนที่คุณไว้ใจ', [text('p', 'สร้างรหัสเชิญแล้วส่งให้ผู้ดูแลด้วยตัวคุณเอง รหัสใช้ได้ครั้งเดียวและมีวันหมดอายุ', 'small'), button('สร้างรหัสเชิญ', () => {
     const consent = el('input', { type: 'checkbox', required: true });
     const submit = el('button', { type: 'submit', class: 'primary' }, 'ยินยอมและสร้างรหัส');
@@ -257,27 +428,56 @@ function familyPanel(owner) {
       event.preventDefault(); if (!consent.checked) return;
       task(async () => {
         const result = await api(selectedPath('/invites'), { method: 'POST', body: { consent: true } });
-        openDialog('รหัสเชิญผู้ดูแล', el('div', {}, text('p', 'ส่งรหัสนี้ให้เฉพาะคนที่คุณต้องการให้เข้าถึงข้อมูล อย่าเผยแพร่ในที่สาธารณะ'), text('code', result.code, 'code-box'), text('p', `หมดอายุ ${dateLabel(result.expiresAt)} เวลา ${timeLabel(result.expiresAt)} น. · ใช้ได้ครั้งเดียว`, 'hint'), el('div', { class: 'actions' }, button('คัดลอกรหัส', event => task(async () => { if (!navigator.clipboard?.writeText) { notify('กรุณาเลือกรหัสด้านบนแล้วคัดลอก'); return; } await navigator.clipboard.writeText(result.code); notify('คัดลอกรหัสแล้ว'); }, event.currentTarget), 'primary'), button('เสร็จแล้ว', closeDialog))));
+        openDialog('รหัสเชิญผู้ดูแล', invitationDialog(result));
       }, submit);
     } }, text('p', 'ผู้ที่ได้รับรหัสและเข้าใช้ผ่าน LINE จะมีสิทธิ์ดูตารางยาและบันทึกการตอบรับของคุณ'), el('label', { class: 'check' }, consent, text('span', 'ฉันยินยอมเปิดเผยข้อมูลในพื้นที่นี้ให้ผู้ดูแลที่ฉันจะส่งรหัสให้')), submit);
     openDialog('เลือกเปิดเผยข้อมูลให้ผู้ดูแล', form);
   }, 'primary')]));
   return panel;
 }
+async function printCareSummary() {
+  await loadPatient(state.patient.id);
+  const summary = el('section', { class: 'print-summary' }, text('h2', 'สรุปตารางยาและการตอบรับ'),
+    text('p', `พื้นที่ดูแล: ${state.patient.displayName}`),
+    text('p', `จัดทำ ${dateLabel(Date.now())} เวลา ${timeLabel(Date.now())} น. · เวลาไทย`),
+    text('p', 'ข้อมูลส่วนบุคคล โปรดเก็บและส่งให้เฉพาะผู้ที่คุณอนุญาต สถานะเป็นการรายงานของผู้ใช้ ไม่ใช่หลักฐานยืนยันการรับประทานยา'),
+    text('h3', `ตารางยาปัจจุบัน ${state.schedules.length} รายการ`));
+  for (const schedule of state.schedules) {
+    summary.append(el('article', {}, text('h4', schedule.label), text('p', schedule.instructions || 'ไม่ได้ระบุวิธีใช้'),
+      text('p', `${schedule.active ? 'ใช้งาน' : 'พักตาราง'} · ${schedule.times.join(', ')} น. · ${schedule.weekdays.map(d => dayNames[d]).join(' ')}`),
+      text('p', `เริ่ม ${schedule.startDate} · สิ้นสุด ${schedule.endDate || 'ไม่กำหนด'}`)));
+  }
+  if (!state.schedules.length) summary.append(text('p', 'ไม่มีตารางยาปัจจุบัน'));
+  const doses = [...state.doses].sort((a, b) => b.dueAt - a.dueAt);
+  summary.append(text('h3', `การตอบรับที่โหลดได้ล่าสุด ${doses.length} รอบ`),
+    text('p', 'รายการนี้เป็นข้อมูลล่าสุดที่ระบบส่งมา อาจไม่ครอบคลุมประวัติทั้งหมด การลบตารางไม่ลบประวัติการตอบรับเดิม'));
+  const table = el('table', {}, el('thead', {}, el('tr', {}, ...['รอบเวลาไทย', 'รายการ', 'สถานะ'].map(label => text('th', label)))));
+  const body = el('tbody');
+  for (const dose of doses) body.append(el('tr', {}, text('td', `${dateLabel(dose.dueAt)} ${timeLabel(dose.dueAt)} น.`), text('td', dose.label || 'รอบยาตามตาราง'), text('td', labels[dose.status] || 'ไม่ทราบสถานะ')));
+  table.append(body); summary.append(table);
+  openDialog('ตรวจสรุปก่อนพิมพ์', summary, el('div', { class: 'dialog-actions' },
+    button('พิมพ์ / บันทึก PDF', () => window.print(), 'primary'), button('ปิด', closeDialog)));
+}
 function settingsPanel(owner) {
-  const panel = el('section', { 'aria-labelledby': 'settings-title' }, text('h2', 'ตั้งค่าพื้นที่ดูแล'));
+  const panel = el('section', { class:'page-stack', 'aria-labelledby': 'settings-title' }, text('h2', 'ตั้งค่าพื้นที่ดูแล'));
   panel.querySelector('h2').id = 'settings-title';
+  if(state.session.features?.voiceEnabled)panel.append(voiceCommandPanel());
+  if(owner)panel.append(card('สแกนฉลากยา / ร่างจากเสียง',[text('p','เปิดความยินยอม แล้วส่งรูปฉลากที่อ่านชัดหรือข้อความเสียงในแชตน้องอุ่น ตรวจเทียบต้นฉบับและแก้ข้อมูลก่อนยืนยันบันทึกตาราง'),el('a',{href:'/media-review.html',class:'button secondary'},'เปิดตรวจภาพและเสียง')]));
+  if(owner)panel.append(emergencyContactsPanel(true));
+  panel.append(card('ชำระเงิน', [text('p', 'ยังไม่เปิดบริการแพ็กเกจและชำระเงิน ไม่มีการเรียกเก็บเงินจากหน้านี้')]));
   panel.append(card('สถานะการแจ้งเตือน', [text('p', state.session.features?.deliveryEnabled ? 'ระบบเปิดส่งเตือนแล้ว การส่งขึ้นกับสิทธิ์ LINE ของผู้รับและสถานะตารางยา' : 'ยังไม่เปิดส่งแจ้งเตือนผ่าน LINE'), text('p', 'เพิ่มบัญชีทางการน้องอุ่นเป็นเพื่อนและไม่บล็อกบัญชี เพื่อให้ LINE รับการแจ้งเตือนได้เมื่อเปิดบริการ', 'small'), sharingEnabled() ? text('p', 'เมื่อยังไม่มีการตอบรับ ผู้ดูแลอาจได้รับข้อความให้ตรวจสอบตามที่ตั้งไว้ การไม่ตอบไม่ใช่การวินิจฉัยเหตุฉุกเฉิน', 'small') : text('p', 'ใช้งานแบบดูแลตัวเองด้วยบัญชี LINE ของคุณ บันทึกสถานะได้ด้วยตัวเอง', 'small')]));
   if (owner) panel.append(card('ข้อมูลและความยินยอม', [text('p', `พื้นที่ดูแล: ${state.patient.displayName}`), state.patient.consentedAt ? text('p', `ให้ความยินยอมเมื่อ ${dateLabel(state.patient.consentedAt)}`, 'small') : null, el('div', { class: 'actions' }, button('ดาวน์โหลดข้อมูลของฉัน', event => task(async () => {
     const data = await api(selectedPath('/export'));
     const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
     const anchor = el('a', { href: url, download: 'nong-oon-my-data.json' }); document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); notify('เตรียมไฟล์ข้อมูลแล้ว โปรดเก็บไฟล์นี้ในที่ปลอดภัย');
   }, event.currentTarget), 'secondary'), button('ถอนความยินยอม', () => confirmDialog('ถอนความยินยอม?', 'พื้นที่นี้จะหยุดใช้งาน ผู้ดูแลจะไม่เห็นข้อมูล และการแจ้งเตือนที่ยังไม่ส่งจะหยุด ข้อมูลที่ต้องจัดเก็บชั่วคราวจะถูกลบตามนโยบาย กรุณาดาวน์โหลดข้อมูลที่ต้องการเก็บไว้ก่อน', 'ถอนความยินยอม', async () => { await api(selectedPath('/consent'), { method: 'DELETE' }); state.patient = null; await loadPatients(); notify('ถอนความยินยอมแล้ว พื้นที่นี้หยุดใช้งาน'); }), 'danger'))]));
+  panel.append(button('ออกจากระบบ',logout,'secondary compact'));
+  if(sharingEnabled())panel.append(button('จัดการผู้ดูแล',()=>showTab('family'),'secondary compact'));
   panel.append(card('ใช้งานอย่างเข้าใจ', [text('p', 'ไม่เปลี่ยนวิธีใช้หรือเพิ่มขนาดยาเพราะพลาดการแจ้งเตือน โปรดปรึกษาผู้ประกอบวิชาชีพเมื่อไม่แน่ใจ', 'small'), el('a', { href: '/help.html' }, 'อ่านวิธีใช้น้องอุ่น'), el('br'), el('a', { href: '/privacy.html' }, 'อ่านข้อมูลและความเป็นส่วนตัว')]));
   return panel;
 }
 async function logout(event) {
-  await task(async () => { await api('/auth/logout', { method: 'POST', body: {} }); state.session = null; state.patient = null; state.patients = []; state.schedules = []; state.doses = []; state.members = []; closeDialog(); await start(); notify('ออกจากระบบแล้ว'); }, event?.currentTarget);
+  await task(async () => { await api('/auth/logout', { method: 'POST', body: {} }); familyAttempts.clear(); doseReceipt = null; doseFocusId = null; document.body.classList.remove('family-call-mode', 'dose-focus-mode', 'app-shell-mode'); state.session = null; state.patient = null; state.patients = []; state.schedules = []; state.doses = []; state.members = []; closeDialog(); await start(); notify('ออกจากระบบแล้ว'); }, event?.currentTarget);
 }
 async function loadPatients(preferredId) {
   const data = await api('/api/patients'); state.patients = data.patients;
@@ -318,12 +518,16 @@ function refreshVisible() {
   // Do not replace a select while a keyboard or assistive-technology user operates it.
   if (view.contains(document.activeElement) && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
   const active = document.activeElement;
-  const key = active && view.contains(active) && active.tagName === 'BUTTON'
+  const key = active && view.contains(active) && ['BUTTON', 'A'].includes(active.tagName)
     ? { label: active.getAttribute('aria-label'), text: active.textContent } : null;
   task(async () => {
+    state.session = await api('/api/session');
+    updateBadge();
+    if (!state.session.authenticated) { await start(); return; }
+    if (!state.session.features?.careEnabled) { await start(); return; }
     await loadPatients(state.patient?.id);
     if (key) {
-      const replacement = [...view.querySelectorAll('button')].find(node => key.label
+      const replacement = [...view.querySelectorAll('button,a')].find(node => key.label
         ? node.getAttribute('aria-label') === key.label : node.textContent === key.text);
       replacement?.focus({ preventScroll: true });
     }

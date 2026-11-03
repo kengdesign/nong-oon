@@ -1,3 +1,4 @@
+import {classifyVoiceIntent} from './voice-intent.mjs';
 import {MediaError} from './media-store.mjs';
 import {draftFromText} from './media-extraction.mjs';
 const fail=code=>{throw new MediaError(code,422);};
@@ -49,6 +50,7 @@ export function createMediaInfer(env,{fetcher=fetch,onTranscript}={}){
       let draft=draftFromText(text,sourceKind);
       // Private review payload only, bounded and erased with draft expiry/cancel.
       // Never emitted in logs or aggregate quality reports.
+      if(sourceKind==='voice' && env.VOICE_COMMAND_ENABLED==='true')draft=JSON.stringify({...JSON.parse(draft),voiceIntent:classifyVoiceIntent(text).intent});
       if(sourceKind==='printed_label')draft=JSON.stringify({...JSON.parse(draft),sourceText:text});
       if(onTranscript)onTranscript(text);
       return draft;
