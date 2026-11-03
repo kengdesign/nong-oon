@@ -14,7 +14,7 @@ class Element {
   querySelectorAll(selector){const tags=selector.split(',');return this.children.flatMap(el=>[...(tags.includes(el.tagName)?[el]:[]),...el.querySelectorAll(selector)]);}
 }
 const tick=async()=>{for(let i=0;i<12;i++)await new Promise(resolve=>setImmediate(resolve));};
-async function ui({authenticated=true,consented=true,state='awaiting_review'}={}){
+async function ui({authenticated=true,consented=true,state='awaiting_review',sourceKind='printed_label',voiceIntent}={}){
   const root=new Element('div'),feedback=new Element('p'),calls=[];
   let saved;const timers=new Map();let nextTimer=0;
   const context={setTimeout(fn){timers.set(++nextTimer,fn);return nextTimer;},clearTimeout(id){timers.delete(id);},document:{querySelector:s=>s==='#media-view'?root:feedback,createElement:tag=>new Element(tag)},AbortSignal,crypto,fetch:async(path,options)=>{
@@ -22,8 +22,8 @@ async function ui({authenticated=true,consented=true,state='awaiting_review'}={}
     if(path==='/api/session')value={authenticated,csrf:'synthetic-csrf'};
     else if(path==='/api/patients')value={patients:[{id:'patient',role:'owner',displayName:'Synthetic'}]};
     else if(path.endsWith('/consent'))value={consented,version:'phase2-media-v1',provider:'Synthetic provider'};
-    else if(path.endsWith('/jobs'))value={jobs:[{id:'job',sourceKind:'printed_label',state,createdAt:Date.now()}],currentVersion:0};
-    else if(path.endsWith('/jobs/job'))value={sourceKind:'printed_label',draft:JSON.parse(extraction()),reviews:[],currentVersion:0};
+    else if(path.endsWith('/jobs'))value={jobs:[{id:'job',sourceKind,state,createdAt:Date.now()}],currentVersion:0};
+    else if(path.endsWith('/jobs/job'))value={sourceKind,draft:{...JSON.parse(extraction()),sourceKind,...(voiceIntent?{voiceIntent}:{})},reviews:[],currentVersion:0};
     else if(options.method==='PUT'){
       saved=JSON.parse(options.body);value={snapshot:{schedule:saved.schedule},reviewVersion:1,expectedScheduleVersion:0};
     }else if(path.endsWith('/confirm'))value={confirmed:true};
@@ -70,4 +70,16 @@ test('queued list refreshes automatically but cancellation form stops refresh wi
  assert.equal(f.calls.filter(c=>c.path.endsWith('/jobs')).length,2);
  assert.equal(f.timers.size,1);await find(f.root,'button','ยกเลิกร่างนี้').events.click();await tick();
  assert.equal(f.timers.size,0);assert.equal(f.calls.some(c=>c.method!=='GET'),false);
+});
+
+for(const intent of ['propose_taken','read_status'])test(`voice ${intent} opens a patient-scoped action without a schedule form or write`,async()=>{
+ const f=await ui({sourceKind:'voice',voiceIntent:intent});await find(f.root,'button','เปิดตรวจร่าง').events.click();await tick();
+ assert.equal(f.root.querySelectorAll('audio').length,1);assert.equal(f.root.querySelectorAll('form').length,0);
+ const link=f.root.querySelectorAll('a').find(e=>e.attrs.class==='button primary');assert.ok(link);
+ assert.equal(link.attrs.href,'/?patient=patient&tab='+(intent==='propose_taken'?'today':'history'));
+ assert.equal(f.calls.some(c=>c.method!=='GET'),false);
+});
+test('unknown voice intent retains manual schedule review and never claims acknowledgement',async()=>{
+ const f=await ui({sourceKind:'voice',voiceIntent:'unknown'});await find(f.root,'button','เปิดตรวจร่าง').events.click();await tick();
+ assert.equal(f.root.querySelectorAll('form').length,1);assert.equal(f.calls.some(c=>c.method!=='GET'),false);
 });
