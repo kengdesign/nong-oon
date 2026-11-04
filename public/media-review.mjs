@@ -34,10 +34,12 @@ async function render({automatic=false}={}){stopRefresh();if(!automatic)refreshC
     consent.consented?button('ถอนความยินยอมภาพและเสียง',async()=>{await api(base()+'/consent','DELETE');await render();}):
       button('ยินยอมให้ประมวลผลภาพและเสียง',async()=>{await api(base()+'/consent','POST',{consent:true,version:consent.version});await render();})));
   if(!consent.consented)return;
+  root.append(card('ส่งภาพหรือเสียงให้ตรวจ',node('p','1. กลับแชต LINE น้องอุ่น ส่งรูปฉลากเต็มใบให้ตัวหนังสือชัด หรือส่งข้อความเสียงสั้นโดยไม่เปิดเพลงทับ'),node('p','2. กลับหน้านี้แล้วกดโหลดรายการล่าสุด ระบบจะรออ่านงานที่รับแล้ว ไม่ต้องส่งซ้ำ'),node('p','3. เปิดตรวจร่าง เทียบต้นฉบับและยืนยันข้อมูลก่อนบันทึก ไม่มีการเปลี่ยนตารางจากภาพหรือเสียงโดยอัตโนมัติ')));
   const {jobs}=await api(base()+'/jobs');root.append(button('โหลดรายการล่าสุด',render));
   if(!jobs.length)root.append(node('p','ยังไม่มีร่าง ส่งภาพฉลากหรือเสียงผ่านห้องแชทน้องอุ่นเมื่อบริการเปิดรับแล้ว'));
   for(const job of jobs){const state={queued:'รับงานแล้ว รออ่านข้อมูล',processing:'กำลังอ่าน',awaiting_review:'รอคุณตรวจ',confirmed:'บันทึกแล้ว',failed:'อ่านไม่สำเร็จ',cancelled:'ยกเลิกแล้ว',expired:'หมดอายุ'}[job.state]??'กำลังตรวจ';
     root.append(card(job.sourceKind==='voice'?'ร่างจากเสียง':'ร่างจากภาพ',node('p',state),...(job.state==='awaiting_review'?[button('เปิดตรวจร่าง',()=>openJob(job.id))]:[]),
+      ...(job.state==='failed'?[node('p','อ่านไม่สำเร็จ กรุณาตรวจว่าภาพชัดหรือเสียงได้ยินครบ แล้วส่งใหม่เมื่อพร้อม ตารางเดิมยังคงอยู่')]:[]),
       ...(['queued','processing','awaiting_review'].includes(job.state)?[button('ยกเลิกร่างนี้',()=>cancelJob(job.id))]:[])));}
   if(jobs.some(job=>['queued','processing'].includes(job.state))){
     root.append(node('p',refreshCount<24?'กำลังรออ่านข้อมูล หน้านี้ตรวจสถานะให้ทุก 15 วินาที คุณไม่ต้องส่งภาพซ้ำ':'ยังรอประมวลผล กดโหลดรายการล่าสุดเพื่อตรวจอีกครั้ง ไม่ต้องส่งภาพซ้ำ'));
@@ -51,6 +53,11 @@ function cancelJob(id){stopRefresh();
 }
 async function openJob(id){stopRefresh();const path=base()+`/jobs/${encodeURIComponent(id)}`,view=await api(path);const container=card('ตรวจเทียบกับต้นฉบับ',button('กลับรายการ',render));root.replaceChildren(container);
   container.append(node(view.sourceKind==='voice'?'audio':'img',null,view.sourceKind==='voice'?{src:path+'/source',controls:'',preload:'none'}:{src:path+'/source',alt:'ภาพต้นฉบับสำหรับตรวจข้อมูล'}));
+  if(view.sourceKind==='voice'&&['propose_taken','read_status'].includes(view.draft.voiceIntent)){
+    const taken=view.draft.voiceIntent==='propose_taken';
+    container.append(card('ผลตรวจคำสั่งเสียง',node('p',taken?'ได้ยินคำสั่งว่าทานยาแล้ว กรุณาเลือกรอบที่ตรงกันและกดยืนยันด้วยตัวเอง':'ได้ยินคำถามว่าทานยาแล้วหรือยัง กรุณาดูประวัติการตอบรับที่บันทึกไว้'),node('p','เสียงนี้ยังไม่ได้บันทึกการทานยา และไม่ได้สร้างตารางใหม่'),node('a',taken?'เลือกรอบเพื่อยืนยันทานยา':'ดูประวัติการตอบรับ',{href:'/?patient='+encodeURIComponent(patientId)+'&tab='+(taken?'today':'history'),class:'button primary'})));
+    return;
+  }
   if(view.draft.sourceText){const details=node('details',null);details.append(node('summary','ข้อความที่ OCR อ่านได้ — อาจอ่านผิด กรุณาเทียบภาพ'),node('pre',view.draft.sourceText));container.append(details);}
   if(!view.reviews.length&&view.sourceKind==='printed_label')container.append(button(view.draft.sourceText?'แยกข้อความเดิมใหม่ (ไม่เรียก OCR)':'อ่านภาพเดิมใหม่',()=>{
     container.replaceChildren(node('p',view.draft.sourceText?'แยกข้อมูลจากข้อความ OCR เดิมอีกครั้งโดยไม่เรียกผู้ให้บริการ ผลร่างเดิมจะถูกแทนที่ และไม่เติมข้อมูลวันเวลาให้เอง':'อ่านภาพเดิมด้วยบริการ OCR อีกครั้ง อาจมีค่าบริการ และผลร่างเดิมจะถูกแทนที่ ข้อมูลวันเวลาจะไม่ถูกเติมให้เอง'),
