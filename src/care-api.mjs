@@ -1,3 +1,6 @@
+import { sendDoseConfirmation } from './dose-confirmation.mjs';
+import {validateEmergencyContacts} from './emergency.mjs';
+import {validateDraft} from './draft-contract.mjs';
 import { applyDoseCommand } from './dose-store.mjs';
 
 export const CONSENT_VERSION = '2026-10-26';
@@ -150,6 +153,21 @@ async function saveSchedule(request, db, patientId, scheduleId, actorId, now) {
   const schedule = (await rows(db, 'SELECT * FROM medication_schedules WHERE id=? AND patient_id=?', [nextId, patientId]))[0];
   return json(creating ? 201 : 200, { schedule: scheduleValue(schedule), currentVersion: nextVersion }, patientId);
 }
+async function deleteSchedule(request, db, patientId, scheduleId, actorId, now) {
+  await access(db,patientId,actorId,true);
+  const input=await body(request,['expectedVersion']);
+  if(!Number.isSafeInteger(input.expectedVersion)||input.expectedVersion<1)fail(400,'INVALID_VERSION');
+  const mutation=crypto.randomUUID(), next=input.expectedVersion+1;
+  const args=[patientId,mutation];
+  const results=await batch(db,[
+    statement(db,`UPDATE care_schedules SET current_version=?,mutation_id=? WHERE patient_id=? AND current_version=? AND ${ownerGuard} AND EXISTS(SELECT 1 FROM medication_schedules WHERE id=? AND patient_id=?)`,[next,mutation,patientId,input.expectedVersion,...ownerArgs(patientId,actorId),scheduleId,patientId]),
+    statement(db,`DELETE FROM medication_schedules WHERE id=? AND patient_id=? AND ${mutationGuard}`,[scheduleId,patientId,...args]),
+    statement(db,`UPDATE medication_schedules SET version=? WHERE patient_id=? AND ${mutationGuard}`,[next,patientId,...args]),
+    audit(db,patientId,actorId,'schedule_deleted',scheduleId,next,now,mutationGuard,args)
+  ]);
+  if(!changed(results[0]))fail(409,'STALE_VERSION');
+  return json(200,{deleted:true,currentVersion:next},patientId);
+}
 async function createInvite(request, db, patientId, actorId, now) {
   await access(db, patientId, actorId, true);
   const input = await body(request, ['consent']);
@@ -166,6 +184,18 @@ async function createInvite(request, db, patientId, actorId, now) {
   ]);
   if (!changed(result[0])) fail(409, 'INVITE_QUOTA');
   return json(201, { code, expiresAt });
+}
+async function cancelInvites(db,patientId,actorId,now) {
+  await access(db,patientId,actorId,true);
+  const mutation=crypto.randomUUID(),args=[patientId,mutation];
+  const result=await batch(db,[
+    statement(db,`UPDATE care_schedules SET mutation_id=? WHERE patient_id=? AND ${ownerGuard}
+      AND EXISTS(SELECT 1 FROM care_invites WHERE patient_id=? AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at>?)`,
+      [mutation,patientId,...ownerArgs(patientId,actorId),patientId,now]),
+    statement(db,`UPDATE care_invites SET revoked_at=? WHERE patient_id=? AND consumed_at IS NULL AND revoked_at IS NULL AND ${mutationGuard}`,[now,patientId,...args]),
+    audit(db,patientId,actorId,'sharing_invitations_cancelled',null,null,now,mutationGuard,args)
+  ]);
+  return json(200,{cancelled:true,changed:changed(result[0])},patientId);
 }
 async function acceptInvite(request, db, actorId, now) {
   const input = await body(request, ['code']);
@@ -245,6 +275,18 @@ export async function handleCareApi(request, env, { actorId, now = Date.now() } 
     if (selfCareOnly && method === 'POST' && (url.pathname === '/api/invites/accept' || /^\/api\/patients\/[^/]+\/invites$/.test(url.pathname))) fail(403, 'SHARING_DISABLED');
     const active = await rows(db, 'SELECT actor_id FROM accounts WHERE actor_id=? AND blocked_at IS NULL', [actorId]);
     if (active.length !== 1) fail(401, 'AUTH_REQUIRED');
+    if(url.pathname==='/api/emergency-call') {
+      if(method!=='GET')fail(405,'METHOD_NOT_ALLOWED');
+      const contacts=await rows(db,`SELECT c.phone FROM emergency_contacts c
+        JOIN patients p ON p.id=c.patient_id JOIN care_members m ON m.patient_id=p.id
+        JOIN accounts a ON a.actor_id=m.actor_id
+        WHERE p.owner_actor_id=? AND m.actor_id=? AND m.role='owner' AND m.revoked_at IS NULL
+        AND p.revoked_at IS NULL AND a.blocked_at IS NULL AND c.priority=1 LIMIT 2`,[actorId,actorId]);
+      if(contacts.length!==1)fail(409,'PRIMARY_CONTACT_UNAVAILABLE');
+      const phone=contacts[0].phone;
+      if(typeof phone!=='string'||!/^\+?[0-9]{8,15}$/.test(phone))fail(409,'PRIMARY_CONTACT_UNAVAILABLE');
+      return new Response(null,{status:302,headers:{location:`tel:${phone}`,'cache-control':'private, no-store','referrer-policy':'no-referrer'}});
+    }
     if (url.pathname === '/api/patients') {
       if (method === 'POST') return await createPatient(request, db, actorId, now);
       if (method === 'GET') return json(200, { patients: (await rows(db,
@@ -258,13 +300,63 @@ export async function handleCareApi(request, env, { actorId, now = Date.now() } 
     if (!match) fail(404, 'NOT_FOUND');
     const [, patientId, tail = ''] = match;
     if (selfCareOnly) await access(db, patientId, actorId, true);
+    if (tail === 'emergency-call-action' && method === 'GET') {
+      await access(db,patientId,actorId,true);
+      const contacts=await rows(db,`SELECT priority,name,phone FROM emergency_contacts WHERE patient_id=? AND ${ownerGuard} ORDER BY priority LIMIT 3`,[patientId,...ownerArgs(patientId,actorId)]);
+      if(!contacts.length)fail(409,'CONTACT_REQUIRED');
+      return json(200,{action:{type:'uri',label:'ติดต่อครอบครัว',uri:`tel:${contacts[0].phone}`},
+        priority:1,automaticFallback:false,requiresMenuSync:true});
+    }
+    if (tail === 'emergency-contacts') {
+      await access(db, patientId, actorId, true);
+      if (method === 'GET') return json(200, {contacts: await rows(db,
+        `SELECT priority,name,phone FROM emergency_contacts WHERE patient_id=? AND EXISTS(${accessSQL}) ORDER BY priority`,[patientId,patientId,actorId])});
+      if (method === 'PUT') {
+        const input=await body(request,['contacts']);
+        let contacts;try { contacts=validateEmergencyContacts(input.contacts); } catch { fail(400,'INVALID_CONTACTS'); }
+        await batch(db,[statement(db,`DELETE FROM emergency_contacts WHERE patient_id=? AND ${ownerGuard}`,[patientId,...ownerArgs(patientId,actorId)]),
+          ...contacts.map(c=>statement(db,`INSERT INTO emergency_contacts(patient_id,priority,name,phone) SELECT ?,?,?,? WHERE ${ownerGuard}`,
+            [patientId,c.priority,c.name,c.phone,...ownerArgs(patientId,actorId)]))]);
+        return json(200,{saved:true});
+      }
+      fail(405,'METHOD_NOT_ALLOWED');
+    }
+    if(tail==='voice/consent' && method==='PUT'){
+      await access(db,patientId,actorId,true);
+      if(env.VOICE_COMMAND_ENABLED!=='true')fail(503,'VOICE_DISABLED');
+      const input=await body(request,['acknowledge']);if(input.acknowledge!==true)fail(400,'CONSENT_REQUIRED');
+      await batch(db,[statement(db,`INSERT INTO voice_command_consents(patient_id,actor_id,granted_at,expires_at)
+        SELECT ?,?,?,? WHERE ${ownerGuard} ON CONFLICT(patient_id,actor_id) DO UPDATE SET granted_at=excluded.granted_at,expires_at=excluded.expires_at`,
+        [patientId,actorId,now,now+86400000,...ownerArgs(patientId,actorId)])]);
+      return json(200,{expiresAt:now+86400000});
+    }
+    if (tail === 'voice/latest' && method === 'GET') {
+      await access(db,patientId,actorId);
+      if(env.VOICE_COMMAND_ENABLED!=='true')fail(503,'VOICE_DISABLED');
+      const jobs=await rows(db,`SELECT j.id,j.draft_json FROM media_jobs j JOIN media_consents c
+        ON c.patient_id=j.patient_id AND c.actor_id=j.actor_id AND c.generation=j.consent_generation
+        WHERE j.patient_id=? AND j.actor_id=? AND j.source_kind='voice' AND j.state='awaiting_review'
+        AND j.expires_at>? AND c.expires_at>? AND c.revoked_at IS NULL AND EXISTS(SELECT 1 FROM voice_command_consents v WHERE v.patient_id=j.patient_id AND v.actor_id=j.actor_id AND v.expires_at>? AND v.granted_at<=j.source_at) AND EXISTS(${accessSQL})
+        ORDER BY j.created_at DESC LIMIT 1`,[patientId,actorId,now,now,now,patientId,actorId]);
+      let draft;try{draft=JSON.parse(jobs[0]?.draft_json??'null');}catch{}
+      return json(200,{intent:validateDraft(draft).ok ? draft.voiceIntent??'unknown':'unknown',requiresConfirmation:true});
+    }
+
     if (tail === 'consent' && method === 'DELETE') return await withdrawConsent(db, patientId, actorId, now);
+    if (tail === 'invites' && method === 'DELETE') return await cancelInvites(db,patientId,actorId,now);
     if (tail === 'invites' && method === 'POST') return await createInvite(request, db, patientId, actorId, now);
     const member = /^members\/([A-Za-z0-9_-]{1,128})$/.exec(tail);
     if (member && method === 'DELETE') return await revokeMember(db, patientId, member[1], actorId, now);
     if (tail === 'schedules' && method === 'POST') return await saveSchedule(request, db, patientId, null, actorId, now);
     const schedule = /^schedules\/([A-Za-z0-9_-]{1,128})$/.exec(tail);
+    if (schedule && method === 'DELETE') return await deleteSchedule(request,db,patientId,schedule[1],actorId,now);
     if (schedule && method === 'PUT') return await saveSchedule(request, db, patientId, schedule[1], actorId, now);
+    const confirmation = /^doses\/([A-Za-z0-9_-]{1,128})\/confirmation$/.exec(tail);
+    if(confirmation && method==='POST') {
+      await access(db,patientId,actorId,true);
+      await body(request,[]);
+      return json(200,await sendDoseConfirmation(env,{patientId,doseId:confirmation[1],actorId,now}));
+    }
     const report = /^doses\/([A-Za-z0-9_-]{1,128})\/report$/.exec(tail);
     if (report && method === 'POST') {
       await access(db, patientId, actorId);

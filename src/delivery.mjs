@@ -1,3 +1,4 @@
+import { liffUrl, DEFAULT_LIFF_ID } from '../public/liff-client.mjs';
 export const MAX_ATTEMPTS = 5;
 export const LEASE_MS = 30_000;
 export const MAX_DELIVERIES_PER_WAKE = 10;
@@ -42,22 +43,32 @@ export function deliveryStatus(env, now = Date.now()) {
 }
 
 /** Generic lock-screen content; medication, patient and account data stay behind login. */
-export function notificationText(kind, origin) {
+export function notificationText(kind, origin, liffId = null) {
   const lead = kind === 'reminder'
     ? 'น้องอุ่น: ถึงเวลาตามตารางที่คุณตั้งไว้แล้ว เปิดดูรายละเอียดและบันทึกสถานะในระบบ'
     : 'น้องอุ่น: ยังไม่ได้รับการบันทึกสถานะตามเวลาที่ตั้งไว้ เปิดตรวจสอบและติดต่อคนที่คุณดูแลได้ตามความเหมาะสม ข้อความนี้ไม่ได้บ่งชี้ภาวะฉุกเฉิน';
-  return `${lead}\n${origin}/`;
+  return `${lead}\n${liffId ? liffUrl(liffId, 'today') : `${origin}/`}`;
 }
 
+export function lineNotificationMessage(text, postbackId = null, dueAt = null, legacyButton = false, snooze = false) {
+  if (!postbackId) return {type:'text',text};
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(postbackId)) throw Error('INVALID_POSTBACK_ID');
+  return {type:'template',altText:legacyButton?text:'น้องอุ่น: ถึงเวลาทานยาแล้วค่ะ เมื่อทานเสร็จ กรุณากดปุ่มเพื่อบันทึก',template:{type:'buttons',title:dueAt===null?'รอบยาที่แจ้งเตือน':('รอบ '+new Intl.DateTimeFormat('th-TH',{timeZone:'Asia/Bangkok',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date(dueAt))),text:legacyButton?'ถึงเวลาตามตารางที่คุณตั้งไว้แล้ว\nทานแล้ว กดบันทึกรอบนี้ได้เลย':'ถึงเวลาทานยาแล้วค่ะ\nทานเสร็จ กรุณากดปุ่มด้านล่างเพื่อบันทึก',actions:[
+    {type:'postback',label:legacyButton?'✓ ทานยาแล้ว':'กดยืนยันว่าทานแล้ว',data:`dose_taken:${postbackId}`,displayText:'บันทึกว่าทานยาแล้ว'},
+    ...(snooze ? [{type:'postback',label:'เลื่อนไปก่อน (15 นาที)',data:`dose_snooze:${postbackId}`,displayText:'เลื่อนเตือนอีก 15 นาที'}] : [])
+  ]}};
+}
+const payloadHash = async payload => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(payload))),b=>b.toString(16).padStart(2,'0')).join('');
+
 /** Adapter deliberately takes a persisted retry key on the first and every attempt. */
-export async function sendLineNotification({ to, retryKey, text }, { token, fetcher = fetch } = {}) {
+export async function sendLineNotification({ to, retryKey, text, postbackId = null, dueAt = null, legacyButton = false, snooze = false }, { token, fetcher = fetch } = {}) {
   if (!lineId(to) || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(retryKey)
     || typeof text !== 'string' || text.length > 1000 || typeof token !== 'string' || !token.trim()) throw Error('INVALID_DELIVERY');
   let response;
   try {
     response = await fetcher('https://api.line.me/v2/bot/message/push', {
       method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-line-retry-key': retryKey },
-      body: JSON.stringify({ to, messages: [{ type: 'text', text }] }), signal: AbortSignal.timeout(10_000), redirect: 'manual',
+      body: JSON.stringify({ to, messages: [lineNotificationMessage(text, postbackId, dueAt, legacyButton, snooze)] }), signal: AbortSignal.timeout(10_000), redirect: 'manual',
     });
   } catch { return { accepted: false, retryable: true, code: 'NETWORK' }; }
   // We never retain/log response bodies or private request identifiers.
@@ -86,6 +97,7 @@ const eligible = `EXISTS(SELECT 1 FROM patients p JOIN care_schedules c ON c.pat
 
 export async function deliverPatientOutbox(db, patientId, now, env, { fetcher = fetch, clock = Date.now } = {}) {
   if (!id(patientId) || !validNow(now)) throw Error('INVALID_DELIVERY_INPUT');
+  const caregiverLive = env.APP_ENV === 'production' && env.CAREGIVER_DELIVERY_ENABLED === 'true';
   const config = deliveryConfig(env, Math.max(now, clock()));
   if (!config) return { sent: 0, retried: 0, dead: 0, deliverySkipped: true };
   // Terminalize expired, stale, revoked and exhausted rows before selecting work.
@@ -94,21 +106,33 @@ export async function deliverPatientOutbox(db, patientId, now, env, { fetcher = 
     WHERE patient_id=? AND status IN ('pending','sending') AND (status='pending' OR lease_until<=?)
     AND (expires_at<=? OR attempts>=? OR NOT ${eligible})`)
     .bind(now, MAX_ATTEMPTS, now, MAX_ATTEMPTS, patientId, now, now, MAX_ATTEMPTS, now).run());
-  const candidates = await all(db.prepare(`SELECT o.*,a.line_user_id FROM notification_outbox o
+  const candidates = await all(db.prepare(`SELECT o.*,a.line_user_id,d.due_at FROM notification_outbox o JOIN dose_records d ON d.patient_id=o.patient_id AND d.dose_id=o.dose_id
     JOIN accounts a ON a.actor_id=o.recipient_actor_id
     WHERE o.patient_id=? AND ((o.status='pending' AND o.available_at<=?) OR (o.status='sending' AND o.lease_until<=?))
-      AND o.expires_at>? AND a.line_user_id IN (SELECT value FROM json_each(?))
-      ORDER BY o.available_at,o.id LIMIT ?`).bind(patientId, now, now, now, JSON.stringify(config.recipients), MAX_DELIVERIES_PER_WAKE));
+      AND o.expires_at>? AND (a.line_user_id IN (SELECT value FROM json_each(?)) OR (o.kind='caregiver_alert' AND ?=1))
+      ORDER BY o.available_at,o.id LIMIT ?`).bind(patientId, now, now, now, JSON.stringify(config.recipients), caregiverLive ? 1 : 0, MAX_DELIVERIES_PER_WAKE));
   const metrics = { sent: 0, retried: 0, dead: 0, quotaLimited: false };
   for (const job of candidates) {
     const attemptNow = Math.max(now, clock());
     if (!validNow(attemptNow)) throw Error('INVALID_CLOCK');
     if (!deliveryWindowOpen(env, attemptNow)) break;
-    if (!config.recipients.includes(job.line_user_id)) continue;
-    const text = notificationText(job.kind, config.origin);
-    const payload = JSON.stringify({ to: job.line_user_id, messages: [{ type: 'text', text }] });
-    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload)));
-    const hash = Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
+    if (!config.recipients.includes(job.line_user_id) && !(caregiverLive && job.kind === 'caregiver_alert')) continue;
+    const text = notificationText(job.kind, config.origin, env.LIFF_ID ?? (env.APP_ENV === 'production' ? DEFAULT_LIFF_ID : null));
+    let legacyButton = false;
+    let snooze = env.SNOOZE_ENABLED === 'true';
+    let postbackId = env.LINE_POSTBACK_ENABLED === 'true' && job.kind === 'reminder' ? job.id : null;
+    let hash = await payloadHash(JSON.stringify({to:job.line_user_id,messages:[lineNotificationMessage(text,postbackId,job.due_at,false,snooze)]}));
+    if (snooze && job.payload_hash !== null && job.payload_hash !== hash) {
+      const previous = await payloadHash(JSON.stringify({to:job.line_user_id,messages:[lineNotificationMessage(text,postbackId,job.due_at)]}));
+      if (previous === job.payload_hash) { snooze=false; hash=previous; }
+    }
+    // Preserve the exact body for legacy retries under the same LINE retry key.
+    if (job.payload_hash !== null && job.payload_hash !== hash && postbackId) {
+      const oldButtonHash=await payloadHash(JSON.stringify({to:job.line_user_id,messages:[lineNotificationMessage(text,postbackId,job.due_at,true)]}));
+      if(job.payload_hash===oldButtonHash){legacyButton=true;snooze=false;hash=oldButtonHash;}
+      const legacyHash=await payloadHash(JSON.stringify({to:job.line_user_id,messages:[lineNotificationMessage(text)]}));
+      if(job.payload_hash===legacyHash){postbackId=null;hash=legacyHash;}
+    }
     if ((job.payload_hash !== null && job.payload_hash !== hash)
       || (job.recipient_line_id !== null && job.recipient_line_id !== job.line_user_id)
       || (job.first_attempt_at !== null && attemptNow - job.first_attempt_at >= MAX_KEY_AGE_MS)) {
@@ -149,7 +173,7 @@ export async function deliverPatientOutbox(db, patientId, now, env, { fetcher = 
         WHERE id=? AND status='sending' AND lease_token=?`).bind(job.id, lease).run());
       break;
     }
-    const outcome = await sendLineNotification({ to: job.line_user_id, retryKey: job.id, text }, { token: config.token, fetcher });
+    const outcome = await sendLineNotification({ to: job.line_user_id, retryKey: job.id, text, postbackId, dueAt: job.due_at, legacyButton, snooze }, { token: config.token, fetcher });
     const attempts = job.attempts + 1;
     const finishedAt = Math.max(attemptNow, clock());
     const retryAt = finishedAt + Math.min(5 * 60_000, 15_000 * 2 ** (attempts - 1));

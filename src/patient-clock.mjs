@@ -37,7 +37,7 @@ export class PatientClock {
     try {
       await runPatient(this.env.DB, patientId, now, { env: this.env });
       const config = deliveryConfig(this.env);
-      const wake = await nextWake(this.env.DB, patientId, Date.now(), { deliveryEnabled: config !== null, recipients: config?.recipients ?? [] });
+      const wake = await nextWake(this.env.DB, patientId, Date.now(), { deliveryEnabled: config !== null, recipients: config?.recipients ?? [], caregiverEnabled: this.env.APP_ENV === 'production' && this.env.CAREGIVER_DELIVERY_ENABLED === 'true' });
       if (wake === null) await this.ctx.storage.deleteAlarm(); else await this.ctx.storage.setAlarm(wake);
       await this.ctx.storage.put('lastSuccessAt', now);
     } catch {

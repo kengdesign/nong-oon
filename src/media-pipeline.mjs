@@ -37,8 +37,7 @@ export async function readLineMedia(messageId,kind,token,{fetcher=fetch}={}){
 export async function processMediaJob(env,jobId,{clock=Date.now,fetcher=fetch,infer}={}){
   if(!mediaEnvironment(env)||env.MEDIA_PROCESSING_ENABLED!=='true'||env.MEDIA_API_ENABLED!=='true')return {outcome:'disabled'};
   if(!mediaId(jobId))return {outcome:'invalid'};
-  infer??=createMediaInfer(env,{fetcher});
-  if(typeof infer!=='function')return {outcome:'provider_not_ready'};
+  if(!infer && !createMediaInfer(env,{fetcher}))return {outcome:'provider_not_ready'};
   const job=await claimMediaJob(env.DB,jobId,clock(),env.MEDIA_PROVIDER_ID);
   if(!job)return {outcome:'not_claimed'};
   try{
@@ -48,6 +47,14 @@ export async function processMediaJob(env,jobId,{clock=Date.now,fetcher=fetch,in
     await env.MEDIA_R2.put(job.object_key,media.bytes,{httpMetadata:{contentType:media.type,cacheControl:'private, no-store'}});
     if(!await mediaLeaseValid(env.DB,job,clock()))return {outcome:'revoked'};
     checked(await stmt(env.DB,'UPDATE media_jobs SET content_type=? WHERE id=? AND lease_token=?',[media.type,job.id,job.lease_token]).run());
+    if(!infer){
+      let commandConsent=false;
+      if(env.VOICE_COMMAND_ENABLED==='true' && job.source_kind==='voice'){
+        const consents=await all(env.DB,'SELECT patient_id FROM voice_command_consents WHERE patient_id=? AND actor_id=? AND expires_at>? AND granted_at<=?',[job.patient_id,job.actor_id,clock(),job.source_at]);
+        commandConsent=consents.length===1;
+      }
+      infer=createMediaInfer({...env,VOICE_COMMAND_ENABLED:commandConsent?'true':'false'},{fetcher});
+    }
     const output=await infer({bytes:media.bytes,contentType:media.type,sourceKind:job.source_kind,
       providerId:job.provider_id,signal:AbortSignal.timeout(30_000)});
     if(!await mediaLeaseValid(env.DB,job,clock()))return {outcome:'revoked'};
